@@ -1,0 +1,61 @@
+CALLING A CLASS METHOD
+----------------------
+
+57:       object->SetNext(obj);
+
+// Push the first parameter on the stack
+004011E7   mov         ecx,dword ptr [ebp-14h]
+004011EA   push        ecx
+
+// Move the class address to ECX, the 'this' pointer
+004011EB   mov         ecx,dword ptr [ebp-10h]
+
+// Call this function (which will always be at the same address)
+004011EE   call        @ILT+10(BaseObject::SetNext) (0040100f)
+
+
+A CLASS METHOD EXECUTING
+------------------------
+
+16:       void SetNext(BaseObject *obj) { next = obj; obj->prev = this; }
+
+// Build the stack frame
+00401260   push        ebp
+00401261   mov         ebp,esp
+00401263   sub         esp,44h
+
+// Backup these registers
+00401266   push        ebx
+00401267   push        esi
+00401268   push        edi
+00401269   push        ecx
+
+// Write the 'uninitialised' signature to all the local variables
+0040126A   lea         edi,[ebp-44h]
+0040126D   mov         ecx,11h
+00401272   mov         eax,0CCCCCCCCh
+00401277   rep stos    dword ptr [edi]
+
+// The class 'this' pointer is stored in ECX, place it at the beginning of the stack frame
+00401279   pop         ecx
+0040127A   mov         dword ptr [ebp-4],ecx
+
+// Function execution
+0040127D   mov         eax,dword ptr [ebp-4]
+00401280   mov         ecx,dword ptr [ebp+8]
+00401283   mov         dword ptr [eax],ecx
+00401285   mov         edx,dword ptr [ebp+8]
+00401288   mov         eax,dword ptr [ebp-4]
+0040128B   mov         dword ptr [edx+4],eax
+
+// Restore registers
+0040128E   pop         edi
+0040128F   pop         esi
+00401290   pop         ebx
+
+// Restore stack
+00401291   mov         esp,ebp
+00401293   pop         ebp
+
+// End
+00401294   ret         4

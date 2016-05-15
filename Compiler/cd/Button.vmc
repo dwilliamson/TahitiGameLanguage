@@ -1,0 +1,22 @@
+class Button extends Window
+{
+	int	where;
+
+	state Pressed
+	{
+	begin:
+	}
+
+	state UnPressed
+	{
+		function Hello(void)
+		{
+		}
+	begin:
+	}
+
+	state Alive
+	{
+	begin:
+	}
+}

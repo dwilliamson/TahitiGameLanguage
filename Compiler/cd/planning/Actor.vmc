@@ -1,0 +1,27 @@
+class Actor
+{
+        vector  position;
+        vector  rotation;
+
+        import function Actor   NearestActor(void);
+        import function void    SetAnimation(Animation anim);
+
+        function Actor(void)
+        {
+                position = POSITION_Origin;
+                rotation = ROTATION_Zero;
+        }
+
+        function float GetDistanceTo(Actor to_actor)
+        {
+                float   dist, dx, dy, dz;
+
+                dx = to_actor.position.x - position.x;
+                dy = to_actor.position.y - position.y;
+                dz = to_actor.position.z - position.z;
+
+                dist = sqrt(dx * dx + dy * dy + dz * dz);
+
+                return (dist);
+        }
+}

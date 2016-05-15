@@ -1,0 +1,12 @@
+Monday
+------
+Changed classes and states to use the new ProcessBlock() function
+Added 'begin' label to specify start of state code
+Added function support and local variables
+Added extra assignment operators (+=, -=, *=, /=, %=, &=, ^=, |=, <<=, >>=)
+Added support for the pre-increment and pre-decrement operators
+
+Tuesday
+-------
+Made pre-decrement and pre-increment possible on their own in a statement
+Finally added post-increment and post-decrement operators using the Watcom/LCC method

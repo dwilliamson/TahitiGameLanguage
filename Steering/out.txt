@@ -1,0 +1,862 @@
+0000:	pushca	77
+0005:	push	0
+0010:	arrayi
+0011:	push	100
+0016:	itof
+0017:	asg
+0018:	pushca	77
+0023:	push	1
+0028:	arrayi
+0029:	push	100
+0034:	itof
+0035:	asg
+0036:	pushca	89
+0041:	push	0
+0046:	arrayi
+0047:	push	0
+0052:	itof
+0053:	asg
+0054:	pushca	89
+0059:	push	1
+0064:	arrayi
+0065:	push	200
+0070:	itof
+0071:	asg
+0072:	pushca	77
+0077:	push	1
+0082:	arrayi
+0083:	asgr
+0084:	ftoi
+0085:	pushca	77
+0090:	push	0
+0095:	arrayi
+0096:	asgr
+0097:	ftoi
+0098:	callim	0
+0103:	pushca	89
+0108:	push	1
+0113:	arrayi
+0114:	asgr
+0115:	ftoi
+0116:	pushca	89
+0121:	push	0
+0126:	arrayi
+0127:	asgr
+0128:	ftoi
+0129:	callim	1
+0134:	setst	0
+0139:	ret
+0140:	pushc	124
+0145:	rpv
+0146:	fpush	0.500000
+0151:	callim	4
+0156:	pushr
+0157:	fsub
+0158:	fadd
+0159:	asg
+0160:	push	200
+0165:	itof
+0166:	callv	5
+0171:	addst	4
+0176:	ret
+0177:	pushc	0
+0182:	callim	6
+0187:	push	1
+0192:	jz	458
+0197:	fpush	0.010000
+0202:	callv	4
+0207:	addst	4
+0212:	callv	1
+0217:	pushca	77
+0222:	push	1
+0227:	arrayi
+0228:	asgr
+0229:	ftoi
+0230:	pushca	77
+0235:	push	0
+0240:	arrayi
+0241:	asgr
+0242:	ftoi
+0243:	callim	0
+0248:	pushca	89
+0253:	push	1
+0258:	arrayi
+0259:	asgr
+0260:	ftoi
+0261:	pushca	89
+0266:	push	0
+0271:	arrayi
+0272:	asgr
+0273:	ftoi
+0274:	callim	1
+0279:	push	240
+0284:	itof
+0285:	push	320
+0290:	itof
+0291:	pushca	77
+0296:	push	1
+0301:	arrayi
+0302:	asgr
+0303:	pushca	77
+0308:	push	0
+0313:	arrayi
+0314:	asgr
+0315:	callim	5
+0320:	pushr
+0321:	fpush	100.000000
+0326:	fsetl
+0327:	jz	337
+0332:	setst	1
+0337:	pushca	77
+0342:	push	0
+0347:	arrayi
+0348:	asgr
+0349:	push	40
+0354:	itof
+0355:	fsetl
+0356:	jz	366
+0361:	setst	2
+0366:	pushca	77
+0371:	push	1
+0376:	arrayi
+0377:	asgr
+0378:	push	40
+0383:	itof
+0384:	fsetl
+0385:	jz	395
+0390:	setst	2
+0395:	pushca	77
+0400:	push	0
+0405:	arrayi
+0406:	asgr
+0407:	push	600
+0412:	itof
+0413:	fsetge
+0414:	jz	424
+0419:	setst	2
+0424:	pushca	77
+0429:	push	1
+0434:	arrayi
+0435:	asgr
+0436:	push	440
+0441:	itof
+0442:	fsetge
+0443:	jz	453
+0448:	setst	2
+0453:	jmp	187
+0458:	endst
+0459:	instf
+0460:	subst	28
+0465:	pushl	20
+0470:	push	200
+0475:	itof
+0476:	asg
+0477:	pushl	16
+0482:	fpush	3.141593
+0487:	asg
+0488:	pushl	4
+0493:	pushca	77
+0498:	push	0
+0503:	arrayi
+0504:	asgr
+0505:	push	320
+0510:	itof
+0511:	fsub
+0512:	asg
+0513:	pushl	8
+0518:	pushca	77
+0523:	push	1
+0528:	arrayi
+0529:	asgr
+0530:	push	200
+0535:	itof
+0536:	fsub
+0537:	asg
+0538:	pushl	0
+0543:	push	240
+0548:	itof
+0549:	push	320
+0554:	itof
+0555:	pushca	77
+0560:	push	1
+0565:	arrayi
+0566:	asgr
+0567:	pushca	77
+0572:	push	0
+0577:	arrayi
+0578:	asgr
+0579:	callim	5
+0584:	pushr
+0585:	asg
+0586:	pushc	108
+0591:	push	0
+0596:	itof
+0597:	fsetl
+0598:	jz	632
+0603:	pushl	12
+0608:	pushl	16
+0613:	pushl	16
+0618:	push	2
+0623:	itof
+0624:	fdiv
+0625:	fadd
+0626:	asg
+0627:	jmp	650
+0632:	pushl	12
+0637:	pushl	16
+0642:	push	2
+0647:	itof
+0648:	fdiv
+0649:	asg
+0650:	pushl	0
+0655:	fpush	100.000000
+0660:	fsetl
+0661:	jz	837
+0666:	pushl	4
+0671:	pushca	89
+0676:	push	0
+0681:	arrayi
+0682:	asgr
+0683:	fmul
+0684:	pushl	8
+0689:	pushca	89
+0694:	push	1
+0699:	arrayi
+0700:	asgr
+0701:	fmul
+0702:	fadd
+0703:	push	0
+0708:	itof
+0709:	fsetl
+0710:	jz	745
+0715:	pushc	124
+0720:	rpv
+0721:	pushl	12
+0726:	pushc	124
+0731:	fsub
+0732:	fpush	0.100000
+0737:	fmul
+0738:	fadd
+0739:	asg
+0740:	jmp	765
+0745:	pushc	124
+0750:	rpv
+0751:	fpush	0.500000
+0756:	callim	4
+0761:	pushr
+0762:	fsub
+0763:	fadd
+0764:	asg
+0765:	pushl	0
+0770:	push	80
+0775:	itof
+0776:	fsetl
+0777:	jz	799
+0782:	pushl	20
+0787:	push	0
+0792:	itof
+0793:	asg
+0794:	jmp	837
+0799:	pushl	20
+0804:	pushl	0
+0809:	push	80
+0814:	itof
+0815:	fsub
+0816:	pushl	0
+0821:	push	80
+0826:	itof
+0827:	fsub
+0828:	fmul
+0829:	push	2
+0834:	itof
+0835:	fdiv
+0836:	asg
+0837:	pushl	0
+0842:	push	100
+0847:	itof
+0848:	fsetge
+0849:	jz	859
+0854:	setst	0
+0859:	pushl	20
+0864:	callv	5
+0869:	addst	4
+0874:	addst	28
+0879:	outstf
+0880:	ret
+0881:	pushc	22
+0886:	callim	6
+0891:	push	1
+0896:	jz	988
+0901:	fpush	0.010000
+0906:	callv	4
+0911:	addst	4
+0916:	callv	2
+0921:	pushca	77
+0926:	push	1
+0931:	arrayi
+0932:	asgr
+0933:	ftoi
+0934:	pushca	77
+0939:	push	0
+0944:	arrayi
+0945:	asgr
+0946:	ftoi
+0947:	callim	0
+0952:	pushca	89
+0957:	push	1
+0962:	arrayi
+0963:	asgr
+0964:	ftoi
+0965:	pushca	89
+0970:	push	0
+0975:	arrayi
+0976:	asgr
+0977:	ftoi
+0978:	callim	1
+0983:	jmp	891
+0988:	endst
+0989:	instf
+0990:	subst	12
+0995:	pushl	4
+1000:	push	200
+1005:	itof
+1006:	asg
+1007:	pushl	8
+1012:	fpush	3.141593
+1017:	asg
+1018:	pushca	77
+1023:	push	0
+1028:	arrayi
+1029:	asgr
+1030:	push	40
+1035:	itof
+1036:	fsetl
+1037:	jz	1253
+1042:	pushca	89
+1047:	push	1
+1052:	arrayi
+1053:	asgr
+1054:	push	0
+1059:	itof
+1060:	fsetl
+1061:	jz	1095
+1066:	pushl	0
+1071:	pushl	8
+1076:	pushl	8
+1081:	push	2
+1086:	itof
+1087:	fdiv
+1088:	fadd
+1089:	asg
+1090:	jmp	1113
+1095:	pushl	0
+1100:	pushl	8
+1105:	push	2
+1110:	itof
+1111:	fdiv
+1112:	asg
+1113:	pushca	89
+1118:	push	0
+1123:	arrayi
+1124:	asgr
+1125:	push	0
+1130:	itof
+1131:	fsetl
+1132:	jz	1167
+1137:	pushc	124
+1142:	rpv
+1143:	pushl	0
+1148:	pushc	124
+1153:	fsub
+1154:	fpush	0.100000
+1159:	fmul
+1160:	fadd
+1161:	asg
+1162:	jmp	1187
+1167:	pushc	124
+1172:	rpv
+1173:	fpush	0.500000
+1178:	callim	4
+1183:	pushr
+1184:	fsub
+1185:	fadd
+1186:	asg
+1187:	pushca	77
+1192:	push	0
+1197:	arrayi
+1198:	asgr
+1199:	push	0
+1204:	itof
+1205:	fsetl
+1206:	jz	1228
+1211:	pushl	4
+1216:	push	0
+1221:	itof
+1222:	asg
+1223:	jmp	1253
+1228:	pushl	4
+1233:	pushca	77
+1238:	push	0
+1243:	arrayi
+1244:	asgr
+1245:	push	5
+1250:	itof
+1251:	fmul
+1252:	asg
+1253:	pushca	77
+1258:	push	1
+1263:	arrayi
+1264:	asgr
+1265:	push	40
+1270:	itof
+1271:	fsetl
+1272:	jz	1488
+1277:	pushca	89
+1282:	push	0
+1287:	arrayi
+1288:	asgr
+1289:	push	0
+1294:	itof
+1295:	fsetg
+1296:	jz	1330
+1301:	pushl	0
+1306:	pushl	8
+1311:	pushl	8
+1316:	push	2
+1321:	itof
+1322:	fdiv
+1323:	fadd
+1324:	asg
+1325:	jmp	1348
+1330:	pushl	0
+1335:	pushl	8
+1340:	push	2
+1345:	itof
+1346:	fdiv
+1347:	asg
+1348:	pushca	89
+1353:	push	1
+1358:	arrayi
+1359:	asgr
+1360:	push	0
+1365:	itof
+1366:	fsetl
+1367:	jz	1402
+1372:	pushc	124
+1377:	rpv
+1378:	pushl	0
+1383:	pushc	124
+1388:	fsub
+1389:	fpush	0.100000
+1394:	fmul
+1395:	fadd
+1396:	asg
+1397:	jmp	1422
+1402:	pushc	124
+1407:	rpv
+1408:	fpush	0.500000
+1413:	callim	4
+1418:	pushr
+1419:	fsub
+1420:	fadd
+1421:	asg
+1422:	pushca	77
+1427:	push	1
+1432:	arrayi
+1433:	asgr
+1434:	push	0
+1439:	itof
+1440:	fsetl
+1441:	jz	1463
+1446:	pushl	4
+1451:	push	0
+1456:	itof
+1457:	asg
+1458:	jmp	1488
+1463:	pushl	4
+1468:	pushca	77
+1473:	push	1
+1478:	arrayi
+1479:	asgr
+1480:	push	5
+1485:	itof
+1486:	fmul
+1487:	asg
+1488:	pushca	77
+1493:	push	0
+1498:	arrayi
+1499:	asgr
+1500:	push	600
+1505:	itof
+1506:	fsetge
+1507:	jz	1730
+1512:	pushca	89
+1517:	push	1
+1522:	arrayi
+1523:	asgr
+1524:	push	0
+1529:	itof
+1530:	fsetg
+1531:	jz	1565
+1536:	pushl	0
+1541:	pushl	8
+1546:	pushl	8
+1551:	push	2
+1556:	itof
+1557:	fdiv
+1558:	fadd
+1559:	asg
+1560:	jmp	1583
+1565:	pushl	0
+1570:	pushl	8
+1575:	push	2
+1580:	itof
+1581:	fdiv
+1582:	asg
+1583:	pushca	89
+1588:	push	0
+1593:	arrayi
+1594:	asgr
+1595:	push	0
+1600:	itof
+1601:	fsetg
+1602:	jz	1637
+1607:	pushc	124
+1612:	rpv
+1613:	pushl	0
+1618:	pushc	124
+1623:	fsub
+1624:	fpush	0.100000
+1629:	fmul
+1630:	fadd
+1631:	asg
+1632:	jmp	1657
+1637:	pushc	124
+1642:	rpv
+1643:	fpush	0.500000
+1648:	callim	4
+1653:	pushr
+1654:	fsub
+1655:	fadd
+1656:	asg
+1657:	pushca	77
+1662:	push	0
+1667:	arrayi
+1668:	asgr
+1669:	push	640
+1674:	itof
+1675:	fsetge
+1676:	jz	1698
+1681:	pushl	4
+1686:	push	0
+1691:	itof
+1692:	asg
+1693:	jmp	1730
+1698:	pushl	4
+1703:	push	640
+1708:	itof
+1709:	pushca	77
+1714:	push	0
+1719:	arrayi
+1720:	asgr
+1721:	fsub
+1722:	push	5
+1727:	itof
+1728:	fmul
+1729:	asg
+1730:	pushca	77
+1735:	push	1
+1740:	arrayi
+1741:	asgr
+1742:	push	440
+1747:	itof
+1748:	fsetge
+1749:	jz	1972
+1754:	pushca	89
+1759:	push	0
+1764:	arrayi
+1765:	asgr
+1766:	push	0
+1771:	itof
+1772:	fsetl
+1773:	jz	1807
+1778:	pushl	0
+1783:	pushl	8
+1788:	pushl	8
+1793:	push	2
+1798:	itof
+1799:	fdiv
+1800:	fadd
+1801:	asg
+1802:	jmp	1825
+1807:	pushl	0
+1812:	pushl	8
+1817:	push	2
+1822:	itof
+1823:	fdiv
+1824:	asg
+1825:	pushca	89
+1830:	push	1
+1835:	arrayi
+1836:	asgr
+1837:	push	0
+1842:	itof
+1843:	fsetg
+1844:	jz	1879
+1849:	pushc	124
+1854:	rpv
+1855:	pushl	0
+1860:	pushc	124
+1865:	fsub
+1866:	fpush	0.100000
+1871:	fmul
+1872:	fadd
+1873:	asg
+1874:	jmp	1899
+1879:	pushc	124
+1884:	rpv
+1885:	fpush	0.500000
+1890:	callim	4
+1895:	pushr
+1896:	fsub
+1897:	fadd
+1898:	asg
+1899:	pushca	77
+1904:	push	1
+1909:	arrayi
+1910:	asgr
+1911:	push	440
+1916:	itof
+1917:	fsetge
+1918:	jz	1940
+1923:	pushl	4
+1928:	push	0
+1933:	itof
+1934:	asg
+1935:	jmp	1972
+1940:	pushl	4
+1945:	push	480
+1950:	itof
+1951:	pushca	77
+1956:	push	1
+1961:	arrayi
+1962:	asgr
+1963:	fsub
+1964:	push	5
+1969:	itof
+1970:	fmul
+1971:	asg
+1972:	pushca	77
+1977:	push	0
+1982:	arrayi
+1983:	asgr
+1984:	push	40
+1989:	itof
+1990:	fsetge
+1991:	jz	2068
+1996:	pushca	77
+2001:	push	1
+2006:	arrayi
+2007:	asgr
+2008:	push	40
+2013:	itof
+2014:	fsetge
+2015:	jz	2068
+2020:	pushca	77
+2025:	push	0
+2030:	arrayi
+2031:	asgr
+2032:	push	600
+2037:	itof
+2038:	fsetl
+2039:	jz	2068
+2044:	pushca	77
+2049:	push	1
+2054:	arrayi
+2055:	asgr
+2056:	push	440
+2061:	itof
+2062:	fsetl
+2063:	jnz	2078
+2068:	push	0
+2073:	jr	5
+2078:	push	1
+2083:	jz	2093
+2088:	setst	0
+2093:	pushl	4
+2098:	callv	5
+2103:	addst	4
+2108:	addst	12
+2113:	outstf
+2114:	ret
+2115:	pushc	50
+2120:	callim	6
+2125:	push	1
+2130:	jz	2222
+2135:	fpush	0.010000
+2140:	callv	4
+2145:	addst	4
+2150:	callv	3
+2155:	pushca	77
+2160:	push	1
+2165:	arrayi
+2166:	asgr
+2167:	ftoi
+2168:	pushca	77
+2173:	push	0
+2178:	arrayi
+2179:	asgr
+2180:	ftoi
+2181:	callim	0
+2186:	pushca	89
+2191:	push	1
+2196:	arrayi
+2197:	asgr
+2198:	ftoi
+2199:	pushca	89
+2204:	push	0
+2209:	arrayi
+2210:	asgr
+2211:	ftoi
+2212:	callim	1
+2217:	jmp	2125
+2222:	endst
+2223:	instf
+2224:	pushca	77
+2229:	push	0
+2234:	arrayi
+2235:	pushca	77
+2240:	push	0
+2245:	arrayi
+2246:	asgr
+2247:	pushca	89
+2252:	push	0
+2257:	arrayi
+2258:	asgr
+2259:	pushl	-12
+2264:	fmul
+2265:	fadd
+2266:	asg
+2267:	pushca	77
+2272:	push	1
+2277:	arrayi
+2278:	pushca	77
+2283:	push	1
+2288:	arrayi
+2289:	asgr
+2290:	pushca	89
+2295:	push	1
+2300:	arrayi
+2301:	asgr
+2302:	pushl	-12
+2307:	fmul
+2308:	fadd
+2309:	asg
+2310:	pushc	104
+2315:	rpv
+2316:	pushc	108
+2321:	pushl	-12
+2326:	fmul
+2327:	fadd
+2328:	asg
+2329:	pushca	112
+2334:	push	0
+2339:	arrayi
+2340:	pushc	104
+2345:	callim	2
+2350:	pushr
+2351:	asg
+2352:	pushca	112
+2357:	push	1
+2362:	arrayi
+2363:	pushc	104
+2368:	callim	3
+2373:	pushr
+2374:	asg
+2375:	outstf
+2376:	ret
+2377:	instf
+2378:	subst	4
+2383:	pushl	0
+2388:	fpush	3.141593
+2393:	asg
+2394:	pushl	-12
+2399:	push	100
+2404:	itof
+2405:	fsetl
+2406:	jz	2423
+2411:	pushl	-12
+2416:	push	100
+2421:	itof
+2422:	asg
+2423:	pushc	108
+2428:	push	200
+2433:	itof
+2434:	pushl	-12
+2439:	fsub
+2440:	push	200
+2445:	itof
+2446:	fdiv
+2447:	push	10
+2452:	itof
+2453:	fmul
+2454:	push	5
+2459:	itof
+2460:	fadd
+2461:	pushc	124
+2466:	callim	2
+2471:	pushr
+2472:	fmul
+2473:	asg
+2474:	pushca	89
+2479:	push	0
+2484:	arrayi
+2485:	pushca	112
+2490:	push	0
+2495:	arrayi
+2496:	asgr
+2497:	pushl	-12
+2502:	fmul
+2503:	asg
+2504:	pushca	89
+2509:	push	1
+2514:	arrayi
+2515:	pushca	112
+2520:	push	1
+2525:	arrayi
+2526:	asgr
+2527:	pushl	-12
+2532:	fmul
+2533:	asg
+2534:	pushc	124
+2539:	push	2
+2544:	itof
+2545:	pushl	0
+2550:	fmul
+2551:	fsetge
+2552:	jz	2577
+2557:	pushc	124
+2562:	rpv
+2563:	push	2
+2568:	itof
+2569:	pushl	0
+2574:	fmul
+2575:	fsub
+2576:	asg
+2577:	pushc	124
+2582:	push	0
+2587:	itof
+2588:	fsetl
+2589:	jz	2614
+2594:	pushc	124
+2599:	rpv
+2600:	push	2
+2605:	itof
+2606:	pushl	0
+2611:	fmul
+2612:	fadd
+2613:	asg
+2614:	addst	4
+2619:	outstf
+2620:	ret
+

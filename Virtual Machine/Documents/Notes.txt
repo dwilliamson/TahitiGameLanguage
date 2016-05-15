@@ -1,0 +1,45 @@
+====================================================================================
+
+VirtualMachine: This is the controller for everything.
+
+-----------------------------
+
+VMUnit: The image of what the compiler generates.
+
+VMClass: An image of a compiler class as read from the VMUnit.
+
+VMState: An image of a compiler state as read from the VMUnit.
+
+VMFunction: An image of a compiler function as read from the VMUnit.
+
+VMVariable: An image of a compiler variable as read from the VMUnit.
+
+-----------------------------
+
+VMObject: A VM instance of a VMClass.
+
+VMThread: A code executing VM instance of a VMClass.
+
+====================================================================================
+
+A VMUnit should have a list of VMClass structures within it. VMClass structures should
+have a list of VMState, VMFunction and VMVariable structures within it. A VMState should
+also have a list of VMFunction structures within it...
+
+
+VMUnit
+{
+	VMClass
+	{
+		VMState
+		{
+			VMFunction ;
+		}
+
+		VMFunction ;
+
+		VMVariable ;
+	}
+}
+
+

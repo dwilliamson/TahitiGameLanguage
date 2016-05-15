@@ -1,0 +1,15 @@
+class Flock
+{
+        int     number_of_birds;
+        Bird    bird_list[10];
+
+        function Init(void)
+        {
+                int     x;
+
+                number_of_birds = rand()%10;
+
+                for (x = 0; x < number_of_birds; x++)
+                        bird_list[x] = new Bird;
+        }
+}

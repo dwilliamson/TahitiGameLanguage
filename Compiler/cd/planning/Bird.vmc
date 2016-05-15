@@ -1,0 +1,42 @@
+class Bird extends Actor
+{
+        function Init(void)
+        {
+                setstate(OnGround);
+        }
+
+        state OnGround
+        {
+                function WatchArea(void)
+                {
+                        if (GetDistanceTo(NearestActor()) < 10)
+                                setstate(Flying);
+                }
+
+                SetAnimation(ANIM_Eating);
+
+                while (1)
+                {
+                        WatchArea();
+                }
+        }
+
+        state Flying
+        {
+                SetAnimation(ANIM_Flying);
+        }
+
+        event SamplePlay(Sample sample)
+        {
+                if (instate(Flying))
+                {
+                        // Direct bird away from noise
+                }
+                else
+                {
+                        if (sample.volume > 1000)
+                                setstate(Flying);
+                }
+        }
+
+}

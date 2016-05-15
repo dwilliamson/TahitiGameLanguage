@@ -1,0 +1,23 @@
+class DialogueBox extends Window
+{
+	int test = 3;
+	int array[4] = { 1, 2, 3, 4 };
+	char xy[10] = { 1, 2, -127 };
+	float blah;
+
+	function PressKey(void)
+	{
+		int	x;
+
+		Draw(0);
+
+		blah = 3.0;
+
+		x = 3 && 5;
+	}
+
+	function void Center(int style)
+	{
+		x[y[2]] = 3;
+	}
+}

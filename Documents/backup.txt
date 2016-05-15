@@ -1,0 +1,1391 @@
+
+#include "..\include\main.h"
+
+
+CodeGenerator::CodeGenerator(VMOFile *_object, Tokeniser *_tokeniser, char *_data)
+{
+	// Set some stuff
+	object = _object;
+	tokeniser = _tokeniser;
+	data = _data;
+	cur_class = NULL;
+}
+
+
+CodeGenerator::~CodeGenerator(void)
+{
+	Class	*class_ptr;
+
+	// Remove all the class definitions
+	while (class_ptr = (Class *)class_list.Enumerate())
+	{
+		class_list.Remove(class_ptr);
+		delete class_ptr;
+	}
+}
+
+
+void CodeGenerator::IsolateTokenString(Token &token)
+{
+	int		x;
+
+	infunc(CodeGenerator::IsolateTokenString);
+
+	// Copy the string
+	for (x = 0; x < token.length; x++)
+		token_string[x] = data[token.position + x];
+
+	// Terminate it
+	token_string[x] = 0;
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessNumberTerm(int flags)
+{
+	Token	token;
+	int		value;
+
+	infunc(CodeGenerator::ProcessNumberTerm);
+
+	token = CUR_TOKEN;
+
+	if (!(flags & FLAGS_ASSIGNMENT))
+		throw CompileError("(Line %d) Token not an l-value", token.line);
+
+	// Get the number
+	IsolateTokenString(token);
+	sscanf(token_string, "%d", &value);
+
+	// Write the opcode
+	object->WriteOp(OPCODE_PUSH_IMMEDIATE, value);
+
+	// Move passed this number and onto the next token
+	INC_TOKEN;
+
+	// Two numbers in a row is WRONG !
+	if (CUR_TOKEN.Group() == TOKEN_GROUP_NUMBER || CUR_TOKEN.type == TOKEN_NAME)
+		throw CompileError("(Line %d) Unexpected token after number term", CUR_TOKEN.line);
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessBrackets(int flags)
+{
+	infunc(CodeGenerator::ProcessBrackets);
+
+	// This checks for situations like --(x + y)
+	if (flags & FLAGS_PUSH_ADDRESS)
+		throw CompileError("(Line %d) Illegal placement of opening bracket", CUR_TOKEN.line);
+
+	// Need a new frame
+	cur_frame = new ExpressionFrame(object);
+	expr_frame.AddLast(cur_frame);
+
+	// Move onto the next token and process it. Because the current token is the open
+	// bracket the next token could potentially be a reference.
+	INC_TOKEN;
+	ProcessTerm(flags | FLAGS_EXPECTING_REFERENCE);
+
+	// Clear this flag since the the reference will have been processed above
+	flags &= ~FLAGS_EXPECTING_REFERENCE;
+
+	// Loop processing this set until the right bracket is found
+	while (CUR_TOKEN.type != TOKEN_RIGHT_BRACKET)
+		ProcessTerm(flags);
+
+	// Move passed the closing bracket
+	INC_TOKEN;
+
+	// Delete the current frame
+	expr_frame.Remove(cur_frame);
+	delete cur_frame;
+	cur_frame = expr_frame.GetLast();
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessOperatorTerm(int flags)
+{
+	Token	token;
+
+	infunc(CodeGenerator::ProcessOperatorTerm);
+
+	token = CUR_TOKEN;
+
+	// This operator starts a new subset of calculations
+	if (token.type == TOKEN_LEFT_BRACKET)
+	{
+		ProcessBrackets(flags);
+		return (1);
+	}
+
+	// This token is monitored by the opening of a left bracket so if it occurs in an
+	// isolated situation (as tested for here) then it has an unmatched opening bracket.
+	// Error!
+	if (token.type == TOKEN_RIGHT_BRACKET)
+		throw CompileError("(Line %d) Un-matched closing bracket", token.line);
+
+	if (token.type == TOKEN_LOGICAL_AND)
+	{
+		if (!(flags & FLAGS_ASSIGNMENT))
+			throw CompileError("(Line %d) Illegal placing of '&&'", CUR_TOKEN.line);
+
+		// Notify that the current frame needs converting to arithmetic
+		cur_frame->bin_to_arith = 1;
+		cur_frame->last_bin = TOKEN_LOGICAL_AND;
+
+		// Generate a 'jz false' jump
+		cur_frame->AddJump(0);
+		object->WriteOp(OPCODE_JZ, -1);
+	}
+
+	if (token.type == TOKEN_LOGICAL_OR)
+	{
+		if (!(flags & FLAGS_ASSIGNMENT))
+			throw CompileError("(Line %d) Illegal placing of '||'", CUR_TOKEN.line);
+
+		// Notify that the current frame needs converting to arithmetic
+		cur_frame->bin_to_arith = 1;
+
+		// Generate a'jnz true' jump
+		cur_frame->AddJump(1);
+		object->WriteOp(OPCODE_JNZ, -2);
+
+		// If the last binary operator was a logical AND then backpatch and prematurely
+		// assign the false jump to here so that it doesn't skip over any OR statements.
+		if (cur_frame->last_bin == TOKEN_LOGICAL_AND)
+			cur_frame->UpdateJumps(0);
+
+		cur_frame->last_bin = TOKEN_LOGICAL_OR;
+	}
+
+	// Move onto the next token and process it. Because the current token is an operator
+	// the next token could potentially be a reference (name, number, etc). Flag that
+	// this situation is expected.
+	if (token.type == TOKEN_PLUS_PLUS || token.type == TOKEN_MINUS_MINUS)
+	{
+		// Want the variable address in this case, for assignment
+		INC_TOKEN;
+		ProcessTerm(flags | FLAGS_EXPECTING_REFERENCE | FLAGS_PUSH_ADDRESS);
+
+		// Force evaluation of the unary operators
+		flags |= FLAGS_EXPECTING_REFERENCE;
+	}
+	else
+	{
+		INC_TOKEN;
+		ProcessTerm(flags | FLAGS_EXPECTING_REFERENCE);
+	}
+
+	// Example
+	// -------
+	//
+	// a = 3 + -4
+	//
+	// Number 3 is found and pushed onto the stack.
+	// Addition is found and this function is called.
+	// This function moves onto the next token which it suspects to be a label or a number and
+	//  sets the flags appropriately (pFLAGS_EXPECTING_REFERENCE) to mark this.
+	// The subtraction is found and this function is once again called.
+	// This function moves onto the next token which it susecpts to be a reference.
+	// Number 4 is found and pushed onto the stack.
+	// This function detects that an operator (minus) was found where there should have been
+	//  a reference and instead of carrying on with processing, treats the case as unary,
+	//  outputs the necessary opcode (neg, not, etc...) and returns to process the addition
+	//  operator.
+	//
+
+	// Has an operator already been designated?
+	if (flags & FLAGS_EXPECTING_REFERENCE)
+	{
+		// Yes so this is a pre-operator with immediate effect
+		switch (token.type)
+		{
+			// Unary minus
+			case (TOKEN_MINUS):
+				object->WriteOp(OPCODE_NEG);
+				break;
+
+			// Unary plus should sneak through here un-noticed causing no problems
+			case (TOKEN_PLUS):
+				break;
+
+			// Unary bitwise inversion
+			case (TOKEN_BITWISE_NOT):
+				object->WriteOp(OPCODE_NOT);
+				break;
+
+			// Unary logical not
+			case (TOKEN_LOGICAL_NOT):
+				object->WriteOp(OPCODE_SETEZ);
+				break;
+
+			// Immediate increment
+			case (TOKEN_PLUS_PLUS):
+				if (!(flags & FLAGS_ASSIGNMENT))
+					// Not in an assignment so just remove the address from the stack
+					object->WriteOp(OPCODE_INCP);
+				else
+					object->WriteOp(OPCODE_INCR);
+				break;
+
+			// Immediate decrement
+			case (TOKEN_MINUS_MINUS):
+				if (!(flags & FLAGS_ASSIGNMENT))
+					// Not in an assignment so just remove the address from the stack
+					object->WriteOp(OPCODE_DECP);
+				else
+					object->WriteOp(OPCODE_DECR);
+				break;
+
+			default:
+				throw CompileError("(Line %d) Illegal unary operator", token.line);
+				break;
+		}
+	}
+	else
+	{
+		// Clear this flag since the the reference will have been processed above
+		flags &= ~FLAGS_EXPECTING_REFERENCE;
+
+		while (token.Priority() < CUR_TOKEN.Priority())
+			ProcessTerm(flags);
+
+		if (token.type != TOKEN_LOGICAL_AND && token.type != TOKEN_LOGICAL_OR)
+			object->WriteOp(token.Opcode());
+	}
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessNoneTerm(int flags)
+{
+	infunc(CodeGenerator::ProcessNoneTerm);
+
+	// The end of file token should never be part of the code. The outer compiling loop
+	// makes sure it never processes this far. This means that if the NULL token is
+	// encountered, the current expression has not been finished.
+	if (CUR_TOKEN.type == TOKEN_NULL)
+		throw CompileError("(Line %d) Unexpected end of file", CUR_TOKEN.line);
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessMiscTerm(int flags)
+{
+	infunc(CodeGenerator::ProcessMiscTerm);
+
+	// The end of line character should always start a new term of its own. The
+	// expression function will make sure however that it never gets this far and
+	// terminates the expression. If an end of line character is picked up here then
+	// this means that the EOL character is within a term, something which is
+	// obviously illegal.
+	if (CUR_TOKEN.type == TOKEN_END_OF_LINE)
+		throw CompileError("(Line %d) Unexpected end of line", CUR_TOKEN.line);
+
+	if (CUR_TOKEN.type == TOKEN_BLOCK_CLOSE)
+		throw CompileError("(Line %d) Unexpected closing '}'", CUR_TOKEN.line);
+
+	// Move onto the next token
+	INC_TOKEN;
+
+	return (1);
+
+	outfunc;
+}
+
+
+void CodeGenerator::PushAddress(Variable *var)
+{
+	int		scope;
+
+	scope = var->GetScope();
+
+	// Push the address
+	if (scope == VARIABLE_SCOPE_LOCAL || scope == VARIABLE_SCOPE_PARAMETER)
+		object->WriteOp(OPCODE_PUSH_LOCAL_ADDRESS, var->GetAddress());
+	else
+		object->WriteOp(OPCODE_PUSH_MEMBER_ADDRESS, var->GetAddress());
+}
+
+
+void CodeGenerator::PushValue(Variable *var)
+{
+	int		scope;
+
+	scope = var->GetScope();
+
+	// Push the value
+	if (scope == VARIABLE_SCOPE_LOCAL || scope == VARIABLE_SCOPE_PARAMETER)
+		object->WriteOp(OPCODE_PUSH_LOCAL_VALUE, var->GetAddress());
+	else
+		object->WriteOp(OPCODE_PUSH_MEMBER_VALUE, var->GetAddress());
+}
+
+
+int CodeGenerator::ProcessNameTerm(int flags)
+{
+	Variable	*var;
+	Function	*func_ptr;
+
+	infunc(CodeGenerator::ProcessNameTerm);
+
+	// Grab the name
+	IsolateTokenString(CUR_TOKEN);
+	INC_TOKEN;
+
+	if (CUR_TOKEN.type == TOKEN_NAME || CUR_TOKEN.type == TOKEN_NUMBER)
+		throw CompileError("(Line %d) Unexpected token after id", CUR_TOKEN.line);
+
+	// Check for the state beginning marker
+	if (!strcmp(token_string, "begin"))
+	{
+		if ((flags & FLAGS_IN_STATE) && CUR_TOKEN.type == TOKEN_COLON)
+		{
+			if (cur_class->cur_state->GetCodeStart() != -1)
+				throw CompileError("(Line %d) Multiple 'begin' declaration", CUR_TOKEN.line);
+
+			// Set the execution position here
+			cur_class->cur_state->SetCodeStart(object->GetPosition());
+
+			INC_TOKEN;
+
+			return (1);
+		}
+	}
+
+	// Is it a function name?
+	if ((func_ptr = (Function *)cur_class->functions.GetEntry(token_string)) == NULL)
+	{
+		// Attempt to get the variable as a local first
+		if (flags & FLAGS_IN_FUNCTION)
+		{
+			if ((var = (Variable *)cur_class->cur_function->local_list.GetEntry(token_string)) == NULL)
+			{
+				if ((var = (Variable *)cur_class->variables.GetEntry(token_string)) == NULL)
+					throw CompileError("(Line %d) Undefined label", CUR_TOKEN.line);
+			}
+		}
+		else
+		{
+			// Get the variable name
+			if ((var = (Variable *)cur_class->variables.GetEntry(token_string)) == NULL)
+				throw CompileError("(Line %d) Undefined label", CUR_TOKEN.line);
+		}
+	}
+
+	// Is this an array?
+	if (var->GetArrayElements())
+	{
+		// Push the address on the stack always, as it is an array
+		PushAddress(var);
+
+		// Check to see if an object in the array is being referenced
+		if (CUR_TOKEN.type == TOKEN_ARRAY_OPEN)
+		{
+			INC_TOKEN;
+
+			// Process the expression inside
+			ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_IMPLICIT_ASSIGNMENT | FLAGS_IN_ARRAY), TOKEN_ARRAY_CLOSE);
+			INC_TOKEN;
+		
+			// First, multiply the index by the size of the element
+			if (var->GetSize() != 1)
+			{
+				// A little optimisation
+				if (GetNumBits(var->GetSize()) == 1)
+				{
+					object->WriteOp(OPCODE_PUSH_IMMEDIATE, GetLog2(var->GetSize()));
+					object->WriteOp(OPCODE_SHL);
+				}
+				else
+				{
+					object->WriteOp(OPCODE_PUSH_IMMEDIATE, var->GetSize());
+					object->WriteOp(OPCODE_MUL);
+				}
+			}
+
+			// Add the result of the expression to the address
+			object->WriteOp(OPCODE_ADD);
+		}
+		else
+		{
+			// Differentiate between the type of error (if it is one)
+			if (!(flags & FLAGS_ASSIGNMENT))
+			{
+				throw CompileError("(Line %d) Array reference is not a valid l-value", CUR_TOKEN.line);
+			}
+			else
+			{
+			}
+		}
+	}
+
+	// Is this an array?
+	if (var->GetArrayElements())
+	{
+		// Push the address on the stack always, as it is an array
+		PushAddress(var);
+
+		// Don't know whether to cause an error here if this is not the case - YES!
+		if (CUR_TOKEN.type == TOKEN_ARRAY_OPEN)
+		{
+			INC_TOKEN;
+
+			// Process the expression inside
+			ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_IMPLICIT_ASSIGNMENT | FLAGS_IN_ARRAY), TOKEN_ARRAY_CLOSE);
+			INC_TOKEN;
+
+			// First, multiply the index by the size of the element
+			if (var->GetSize() != 1)
+			{
+				// A little optimisation
+				if (GetNumBits(var->GetSize()) == 1)
+				{
+					object->WriteOp(OPCODE_PUSH_IMMEDIATE, GetLog2(var->GetSize()));
+					object->WriteOp(OPCODE_SHL);
+				}
+				else
+				{
+					object->WriteOp(OPCODE_PUSH_IMMEDIATE, var->GetSize());
+					object->WriteOp(OPCODE_MUL);
+				}
+			}
+
+			// Add the result of the expression to the address
+			object->WriteOp(OPCODE_ADD);
+
+			// Check to see if an assignment needs to be made
+			if (CUR_TOKEN.type == TOKEN_ASSIGN)
+			{
+				INC_TOKEN;
+
+				// If this assignment is being made within an array then process the
+				// expression until an array close
+				if (flags & FLAGS_IN_ARRAY)
+				{
+					// Don't increment the token because the array above this level needs
+					// to know when to stop
+					ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_ARRAY_CLOSE);
+				}
+				else
+				{
+					ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_END_OF_LINE);
+				}
+
+				// At this point, the top of the stack should contain a value resulting from
+				// the expression. If the code is within the body of an assignment
+				// (of the type x = y or [x]) then after placing the value at the top of the
+				// stack into the address below it (popping them both off), the value
+				// should be pushed back onto the stack so that it can be used again. Else
+				// just perform the assignment.
+
+				if (flags & FLAGS_ASSIGNMENT)
+					object->WriteOp(OPCODE_ASSIGN_PUSH);
+				else
+					object->WriteOp(OPCODE_ASSIGN);
+			}
+
+			// Is it a coupled operator and assignment?
+			else if (IsOpAssign(CUR_TOKEN))
+			{
+				int		type;
+
+				// Backup and move on
+				type = CUR_TOKEN.type;
+				INC_TOKEN;
+
+				// Replace the address with the value and push the address
+				object->WriteOp(OPCODE_RPV);
+
+				// If this assignment is being made within an array then process the
+				// expression until an array close
+				if (flags & FLAGS_IN_ARRAY)
+				{
+					// Don't increment the token because the array above this level needs
+					// to know when to stop
+					ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_ARRAY_CLOSE);
+				}
+				else
+				{
+					ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_END_OF_LINE);
+				}
+
+				// Write the operator
+				switch (type)
+				{
+					case (TOKEN_PLUS_ASSIGN): object->WriteOp(OPCODE_ADD); break;
+					case (TOKEN_MINUS_ASSIGN): object->WriteOp(OPCODE_SUB); break;
+					case (TOKEN_MULTIPLY_ASSIGN): object->WriteOp(OPCODE_MUL); break;
+					case (TOKEN_DIVIDE_ASSIGN): object->WriteOp(OPCODE_DIV); break;
+					case (TOKEN_BITWISE_AND_ASSIGN): object->WriteOp(OPCODE_AND); break;
+					case (TOKEN_BITWISE_OR_ASSIGN): object->WriteOp(OPCODE_OR); break;
+					case (TOKEN_BITWISE_XOR_ASSIGN): object->WriteOp(OPCODE_XOR); break;
+					case (TOKEN_SHL_ASSIGN): object->WriteOp(OPCODE_SHL); break;
+					case (TOKEN_SHR_ASSIGN): object->WriteOp(OPCODE_SHR); break;
+				}
+
+				// Make the assignment
+				if (flags & FLAGS_ASSIGNMENT)
+					object->WriteOp(OPCODE_ASSIGN_PUSH);
+				else
+					object->WriteOp(OPCODE_ASSIGN);
+			}
+
+			else if (CUR_TOKEN.type == TOKEN_PLUS_PLUS || CUR_TOKEN.type == TOKEN_MINUS_MINUS)
+			{
+				// Write the appropriate increment/decrement instruction
+				switch (CUR_TOKEN.type)
+				{
+					case (TOKEN_PLUS_PLUS):
+						if (flags & FLAGS_ASSIGNMENT)
+							// Use the value and increment it
+							object->WriteOp(OPCODE_INCM);
+						else
+							// Just increment it since it's not in an assignment
+							object->WriteOp(OPCODE_INCP);
+						break;
+
+					case (TOKEN_MINUS_MINUS):
+						if (flags & FLAGS_ASSIGNMENT)
+							// Use the value and decrement it
+							object->WriteOp(OPCODE_DECM);
+						else
+							object->WriteOp(OPCODE_DECP);
+						break;
+				}
+
+				// Go passed it
+				INC_TOKEN;
+			}
+
+			// No
+			else
+			{
+				if (!(flags & FLAGS_PUSH_ADDRESS))
+					object->WriteOp(OPCODE_ASSIGN_REPLACE);
+			}
+		}
+		else
+		{
+			// Differentiate between the type of error (if it is one)
+			if (!(flags & FLAGS_ASSIGNMENT))
+			{
+				throw CompileError("(Line %d) Array reference is not a valid l-value", CUR_TOKEN.line);
+			}
+			else
+			{
+			}
+		}
+	}
+	else
+	{
+		if (CUR_TOKEN.type == TOKEN_ARRAY_OPEN)
+			throw CompileError("(Line %d) Variable '%s' is not an array", CUR_TOKEN.line, token_string);
+
+		if (CUR_TOKEN.type == TOKEN_ASSIGN)
+		{
+			INC_TOKEN;
+
+			// Push the address of the variable for assignment
+			PushAddress(var);
+
+			// If this assignment is being made within an array then process the
+			// expression until an array close
+			if (flags & FLAGS_IN_ARRAY)
+			{
+				// Don't increment the token because the array above this level needs
+				// to know when to stop
+				ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_ARRAY_CLOSE);
+			}
+			else
+			{
+				ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_END_OF_LINE);
+			}
+
+			if (flags & FLAGS_ASSIGNMENT)
+				object->WriteOp(OPCODE_ASSIGN_PUSH);
+			else
+				object->WriteOp(OPCODE_ASSIGN);
+		}
+
+		else if (IsOpAssign(CUR_TOKEN))
+		{
+			int		type;
+
+			// Backup and move on
+			type = CUR_TOKEN.type;
+			INC_TOKEN;
+
+			// Push the address of the variable for assignment
+			PushAddress(var);
+
+			// Replace the address with the value and push the address
+			object->WriteOp(OPCODE_RPV);
+
+			// If this assignment is being made within an array then process the
+			// expression until an array close
+			if (flags & FLAGS_IN_ARRAY)
+			{
+				// Don't increment the token because the array above this level needs
+				// to know when to stop
+				ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_ARRAY_CLOSE);
+			}
+			else
+			{
+				ProcessExpression(flags | (FLAGS_EXPECTING_REFERENCE | FLAGS_EXPLICIT_ASSIGNMENT), TOKEN_END_OF_LINE);
+			}
+
+			// Write the operator
+			switch (type)
+			{
+				case (TOKEN_PLUS_ASSIGN): object->WriteOp(OPCODE_ADD); break;
+				case (TOKEN_MINUS_ASSIGN): object->WriteOp(OPCODE_SUB); break;
+				case (TOKEN_MULTIPLY_ASSIGN): object->WriteOp(OPCODE_MUL); break;
+				case (TOKEN_DIVIDE_ASSIGN): object->WriteOp(OPCODE_DIV); break;
+				case (TOKEN_BITWISE_AND_ASSIGN): object->WriteOp(OPCODE_AND); break;
+				case (TOKEN_BITWISE_OR_ASSIGN): object->WriteOp(OPCODE_OR); break;
+				case (TOKEN_BITWISE_XOR_ASSIGN): object->WriteOp(OPCODE_XOR); break;
+				case (TOKEN_SHL_ASSIGN): object->WriteOp(OPCODE_SHL); break;
+				case (TOKEN_SHR_ASSIGN): object->WriteOp(OPCODE_SHR); break;
+			}
+
+			// Make the assignment
+			if (flags & FLAGS_ASSIGNMENT)
+				object->WriteOp(OPCODE_ASSIGN_PUSH);
+			else
+				object->WriteOp(OPCODE_ASSIGN);
+		}
+
+		else if (CUR_TOKEN.type == TOKEN_PLUS_PLUS || CUR_TOKEN.type == TOKEN_MINUS_MINUS)
+		{
+			// Push the address of the variable for assignment
+			PushAddress(var);
+
+			// Write the appropriate increment/decrement instruction
+			switch (CUR_TOKEN.type)
+			{
+				case (TOKEN_PLUS_PLUS):
+					if (flags & FLAGS_ASSIGNMENT)
+						// Use the value and increment it
+						object->WriteOp(OPCODE_INCM);
+					else
+						// Just increment it since it's not in an assignment
+						object->WriteOp(OPCODE_INCP);
+					break;
+
+				case (TOKEN_MINUS_MINUS):
+					if (flags & FLAGS_ASSIGNMENT)
+						// Use the value and decrement it
+						object->WriteOp(OPCODE_DECM);
+					else
+						object->WriteOp(OPCODE_DECP);
+					break;
+			}
+
+			// Go passed it
+			INC_TOKEN;
+		}
+
+		else
+		{
+			if (flags & FLAGS_PUSH_ADDRESS)
+				PushAddress(var);
+			else
+				PushValue(var);
+		}
+	}
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessClassTerm(int flags)
+{
+	Class	*class_ptr;
+
+	infunc(CodeGenerator::ProcessClassTerm);
+
+	if (flags & FLAGS_IN_CLASS)
+		throw CompileError("(Line %d) Already within a class", CUR_TOKEN.line);
+
+	if (NEXT_TOKEN.type != TOKEN_NAME)
+		throw CompileError("(Line %d) Expecting class name", CUR_TOKEN.line);
+
+	// Move onto the name and grab it
+	INC_TOKEN;
+	IsolateTokenString(CUR_TOKEN);
+
+	// Sneak passed it
+	INC_TOKEN;
+
+	// Allocate the memory
+	if ((class_ptr = new Class) == NULL)
+		throw CError("Couldn't allocate Class structure");
+
+	// Add this class to the hash list
+	class_list.Add(token_string, class_ptr);
+
+	// Set the current class
+	cur_class = class_ptr;
+
+	ProcessBlock(flags, FLAGS_IN_CLASS);
+
+	// Go passed the close block
+	INC_TOKEN;
+
+	// Write the object tail
+	object->WriteClassInfo(cur_class);
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessIntTerm(int flags, int vflags)
+{
+	char	name[MAX_LABEL_SIZE];
+
+	infunc(CodeGenerator::ProcessIntTerm);
+
+	if ((flags & FLAGS_IN_STATE) && !(flags & FLAGS_IN_FUNCTION))
+		throw CompileError("(Line %d) Not allowed variable declarations inside states, but outside of functions", CUR_TOKEN.line);
+
+	if (NEXT_TOKEN.type != TOKEN_NAME)
+		throw CompileError("(Line %d) No name after type declaration", CUR_TOKEN.line);
+
+	// Move passed the type
+	INC_TOKEN;
+
+	// Loop until the declaration has ended
+	while (CUR_TOKEN.type != TOKEN_END_OF_LINE)
+	{
+		Variable	*var;
+
+		// Get the current variable name
+		IsolateTokenString(CUR_TOKEN);
+		strcpy(name, token_string);
+
+		if (flags & FLAGS_IN_FUNCTION)
+		{
+			var = cur_class->cur_function->AddLocal(this, VARIABLE_TYPEID_INT, name);
+		}
+		else
+		{
+			// Create a new variable
+			if ((var = new Variable(this, VARIABLE_TYPEID_INT, VARIABLE_SCOPE_MEMBER)) == NULL)
+				throw CError("Couldn't allocate variable structure");
+
+			// Set the protection
+			if (vflags == 0) var->SetFlag(cur_class->GetProtection());
+			else var->SetFlag(vflags);
+
+			// Add it to the class list of variables
+			cur_class->variables.Add(name, var);
+		}
+
+		// Go passed the name
+		INC_TOKEN;
+
+		// Check to see if this is an array declaration
+		if (CUR_TOKEN.type == TOKEN_ARRAY_OPEN)
+		{
+			int		num;
+
+			INC_TOKEN;
+
+			// Is it a number?
+			if (CUR_TOKEN.type != TOKEN_NUMBER)
+				throw CompileError("(Line %d) Expecting constant array dimension", CUR_TOKEN.line);
+
+			// Add the extra info stating this is an array
+			IsolateTokenString(CUR_TOKEN);
+			sscanf(token_string, "%d", &num);
+			var->SetArrayElements(num);
+
+			INC_TOKEN;
+
+			// Check for the close block
+			if (CUR_TOKEN.type != TOKEN_ARRAY_CLOSE)
+				throw CompileError("(Line %d) Expecting array dimension closure", CUR_TOKEN.line);
+
+			INC_TOKEN;
+		}
+
+		// Check for multiple variable declarations
+		if (CUR_TOKEN.type == TOKEN_COMMA)
+		{
+			INC_TOKEN;
+
+			if (CUR_TOKEN.type == TOKEN_END_OF_LINE)
+				throw CompileError("(Line %d) Unexpected end of line", CUR_TOKEN.line);
+		}
+		else if (CUR_TOKEN.type != TOKEN_END_OF_LINE)
+			throw CompileError("(Line %d) Illegal token after variable declaration", CUR_TOKEN.line);
+	}
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessProtectionTerm(int flags, int protection)
+{
+	infunc(CodeGenerator::ProcessProtectionTerm);
+
+	// This is a generic public setting
+	if (NEXT_TOKEN.type == TOKEN_COLON)
+	{
+		// Set the protection
+		cur_class->SetProtection(protection);
+
+		// Skip passed the id and the colon
+		INC_TOKEN;
+		INC_TOKEN;
+	}
+	else
+	{
+		// Go passed the keyword
+		INC_TOKEN;
+
+		// Test to see if it precedes anything
+		switch (CUR_TOKEN.type)
+		{
+			case (TOKEN_DECLARE_INT):
+				ProcessIntTerm(flags,  protection);
+				break;
+
+			default:
+				throw CompileError("(Line %d) Invalid token after 'public/protected/private'", CUR_TOKEN.line);
+				break;
+		}
+	}
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessBlock(int flags, int modifier)
+{
+	infunc(CodeGenerator::ProcessBlock);
+
+	// Check for a mandatory opening block
+	if (modifier == FLAGS_IN_STATE || modifier == FLAGS_IN_CLASS || modifier == FLAGS_IN_FUNCTION)
+		if (CUR_TOKEN.type != TOKEN_BLOCK_OPEN)
+			throw CompileError("(Line %d) Expecting an opening block", CUR_TOKEN.line);
+
+	// Modify the flags
+	flags |= modifier;
+
+	// Determine how to read the block
+	if (CUR_TOKEN.type == TOKEN_BLOCK_OPEN)
+	{
+		INC_TOKEN;
+
+		while (1)
+		{
+			// Break if the end of the block has been reached
+			if (CUR_TOKEN.type == TOKEN_BLOCK_CLOSE)
+				break;
+
+			ProcessStatement(flags);
+		}
+	}
+	else
+	{
+		ProcessStatement(flags);
+	}
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessStateTerm(int flags)
+{
+	State	*state_ptr;
+
+	infunc(CodeGenerator::ProcessStateTerm);
+
+	if (!(flags & FLAGS_IN_CLASS))
+		throw CompileError("(Line %d) Can't declare states outside of a class", CUR_TOKEN.line);
+
+	if (flags & FLAGS_IN_STATE)
+		throw CompileError("(Line %d) Nested states are not allowed", CUR_TOKEN.line);
+
+	// Go passed the declare
+	INC_TOKEN;
+	
+	if (CUR_TOKEN.type != TOKEN_NAME)
+		throw CompileError("(Line %d) No name provided for the state", CUR_TOKEN.line);
+
+	// Grab the state name
+	IsolateTokenString(CUR_TOKEN);
+	INC_TOKEN;
+
+	// Allocate some space for the state
+	if ((state_ptr = new State) == NULL)
+		throw CError("Couldn't allocate state structure memory");
+
+	// Setup the state parameters
+	state_ptr->SetPosition(object->GetPosition());
+	state_ptr->SetCodeStart(-1);
+	cur_class->cur_state = state_ptr;
+
+	// Add the state to the list
+	cur_class->states.Add(token_string, state_ptr);
+
+	ProcessBlock(flags, FLAGS_IN_STATE);
+
+	if (state_ptr->GetCodeStart() == -1)
+		throw CompileError("(Line %d) No 'begin' statement specified for state '%s'", CUR_TOKEN.line, state_ptr->string);
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessFunctionTerm(int flags)
+{
+	VarType		ret_type;
+	Function	*func_ptr;
+	int			stack_size;
+	int			final = 0;
+
+	infunc(CodeGenerator::ProcessFunctionTerm);
+	
+	INC_TOKEN;
+
+	// Check for function modifiers
+	if (CUR_TOKEN.type == TOKEN_FINAL)
+	{
+		final = 1;
+		INC_TOKEN;
+	}
+
+	// Does this specify a return type?
+	if (CUR_TOKEN.Group() == TOKEN_GROUP_KEYWORD)
+	{
+		GetTypeInfo(ret_type);
+		INC_TOKEN;
+	}
+
+	// No return specified, treat as void
+	else if (CUR_TOKEN.type == TOKEN_NAME)
+	{
+		ret_type.id = VARIABLE_TYPEID_VOID;
+		strcpy(ret_type.name, "void");
+	}
+
+	// Error
+	else
+	{
+		throw CompileError("(Line %d) Illegal token after function declaration", CUR_TOKEN.line);
+	}
+
+	if (CUR_TOKEN.type != TOKEN_NAME)
+		throw CompileError("(Line %d) No name found for function", CUR_TOKEN.line);
+
+	// Grab the name
+	IsolateTokenString(CUR_TOKEN);
+	INC_TOKEN;
+
+	if (CUR_TOKEN.type != TOKEN_LEFT_BRACKET)
+		throw CompileError("(Line %d) No opening bracket found", CUR_TOKEN.line);
+
+	// Move over the open bracket
+	INC_TOKEN;
+
+	if ((func_ptr = new Function(ret_type)) == NULL)
+		throw CError("Couldn't allocate function structure");
+
+	// Add the function to its appropriate list
+	if (flags & FLAGS_IN_STATE)
+		cur_class->cur_state->functions.Add(token_string, func_ptr);
+	else
+		cur_class->functions.Add(token_string, func_ptr);
+
+	// Set function information
+	func_ptr->SetCodeLocation(object->GetPosition());
+	func_ptr->SetIndex(cur_class->NewFunctionIndex());
+	func_ptr->SetFlag(final ? FFLAGS_FINAL : 0);
+	func_ptr->SetFlag(cur_class->GetProtection());
+
+	// Enter stack frame
+	object->WriteOp(OPCODE_INSTF);
+
+	// Allocate some space on the stack
+	stack_size = object->GetPosition() + 1;
+	object->WriteOp(OPCODE_ADDST, -1);
+
+	while (1)
+	{
+		VarType		type;
+		Variable	*var;
+
+		// Check for no parameters
+		if (CUR_TOKEN.type == TOKEN_VOID)
+		{
+			// void
+			INC_TOKEN;
+
+			if (func_ptr->GetNumParams())
+				throw CompileError("(Line %d) Illegal placement of void type", CUR_TOKEN.line);
+
+			if (CUR_TOKEN.type != TOKEN_RIGHT_BRACKET)
+				throw CompileError("(Line %d) Expecting closing bracket", CUR_TOKEN.line);
+
+			// Closing bracket
+			INC_TOKEN;
+
+			break;
+		}
+
+		// That's when to end!
+		if (CUR_TOKEN.type == TOKEN_RIGHT_BRACKET)
+		{
+			INC_TOKEN;
+			break;
+		}
+
+		// Get the variable type
+		GetTypeInfo(type);
+		INC_TOKEN;
+
+		if (CUR_TOKEN.type != TOKEN_NAME)
+			throw CompileError("(Line %d) Expecting name", CUR_TOKEN.line);
+
+		// And the name
+		IsolateTokenString(CUR_TOKEN);
+		INC_TOKEN;
+
+		// Add the parameter
+		var = func_ptr->AddParameter(this, type.id, token_string);
+
+		if (CUR_TOKEN.type == TOKEN_ARRAY_OPEN)
+		{
+			// Set to an unbounded array
+			var->SetArrayElements(-1);
+
+			// Open block
+			INC_TOKEN;
+
+			if (CUR_TOKEN.type != TOKEN_ARRAY_CLOSE)
+				throw CompileError("(Line %d) Expecting closing array", CUR_TOKEN.line);
+
+			// Close block
+			INC_TOKEN;
+		}
+
+		if (CUR_TOKEN.type == TOKEN_RIGHT_BRACKET)
+		{
+			INC_TOKEN;
+			break;
+		}
+
+		if (CUR_TOKEN.type != TOKEN_COMMA)
+			throw CompileError("(Line %d) Need comma to seperate parameters", CUR_TOKEN.line);
+
+		// Comma
+		INC_TOKEN;
+	}
+
+	func_ptr->FixAddresses();
+	cur_class->cur_function = func_ptr;
+
+	ProcessBlock(flags, FLAGS_IN_FUNCTION);
+
+	// Reclaim the allocated stack and backpatch the addition
+	object->WriteOp(OPCODE_SUBST,  func_ptr->GetCurAddress());
+	object->BackpatchInt(func_ptr->GetCurAddress(), stack_size);
+
+	// Exit stack frame
+	object->WriteOp(OPCODE_OUTSTF);
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessKeywordTerm(int flags)
+{
+	Token	token;
+
+	infunc(CodeGenerator::ProcessKeyword);
+
+	token = CUR_TOKEN;
+
+	switch (token.type)
+	{
+		case (TOKEN_DECLARE_CLASS):
+			ProcessClassTerm(flags);
+			break;
+
+		case (TOKEN_DECLARE_STATE):
+			ProcessStateTerm(flags);
+			break;
+
+		case (TOKEN_DECLARE_FUNCTION):
+			ProcessFunctionTerm(flags);
+			break;
+
+		case (TOKEN_DECLARE_INT):
+			ProcessIntTerm(flags, 0);
+			break;
+
+		case (TOKEN_PUBLIC):
+			ProcessProtectionTerm(flags, VFLAGS_PUBLIC);
+			break;
+
+		case (TOKEN_PROTECTED):
+			ProcessProtectionTerm(flags, VFLAGS_PROTECTED);
+			break;
+
+		case (TOKEN_PRIVATE):
+			ProcessProtectionTerm(flags, VFLAGS_PRIVATE);
+			break;
+
+		default:
+			INC_TOKEN;
+			break;
+	}
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessTerm(int flags)
+{
+	Token	token;
+
+	infunc(CodeGenerator::ProcessTerm);
+
+	token = CUR_TOKEN;
+
+	switch (token.Group())
+	{
+		case (TOKEN_GROUP_NAME):
+			if (!(flags & FLAGS_IN_CLASS))
+				throw CompileError("(Line %d) Not in a class", token.line);
+
+			ProcessNameTerm(flags);
+			break;
+
+		case (TOKEN_GROUP_NUMBER):
+			if (!(flags & FLAGS_IN_CLASS))
+				throw CompileError("(Line %d) Not in a class", token.line);
+
+			ProcessNumberTerm(flags);
+			break;
+
+		case (TOKEN_GROUP_OPERATOR):
+			if (!(flags & FLAGS_IN_CLASS))
+				throw CompileError("(Line %d) Not in a class", token.line);
+
+			ProcessOperatorTerm(flags);
+			break;
+
+		case (TOKEN_GROUP_NONE):
+			ProcessNoneTerm(flags);
+			break;
+
+		case (TOKEN_GROUP_MISC):
+			ProcessMiscTerm(flags);
+			break;
+
+		case (TOKEN_GROUP_KEYWORD):
+			ProcessKeywordTerm(flags);
+			break;
+	}
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessExpression(int flags, TokenType terminator)
+{
+	infunc(CodeGenerator::ProcessExpression);
+
+	// The only valid items in an expression are numbers, labels and operators
+	flags |= FLAGS_EXPECTING_REFERENCE;
+
+	// Create a base expression frame
+	cur_frame = new ExpressionFrame(object);
+	expr_frame.AddLast(cur_frame);
+
+	while (1)
+	{
+		// Check to see if the expression terminator has been reached
+		if (CUR_TOKEN.type == terminator)
+		{
+			// Step passed it and leave the expression
+			//INC_TOKEN;
+			break;
+		}
+
+		ProcessTerm(flags);
+
+		// Don't need to flag a reference after the first time
+		flags &= ~FLAGS_EXPECTING_REFERENCE;
+	}
+
+	expr_frame.Remove(cur_frame);
+	delete cur_frame;
+	cur_frame = expr_frame.GetLast();
+
+	return (1);
+
+	outfunc;
+}
+
+
+int CodeGenerator::ProcessStatement(int flags)
+{
+	infunc(CodeGenerator::ProcessStatement);
+
+	// Process the first term. This term should be enough to launch a statement of it's
+	// own which ends with a semi-colon. Step over this token afterwards.
+	ProcessTerm(flags);
+	INC_TOKEN;
+
+	return (1);
+	outfunc;
+}
+
+
+void CodeGenerator::Begin(void)
+{
+	infunc(CodeGenerator::Begin);
+
+	// Begin processing the coooode!
+
+	while (1)
+	{
+		// Start processing
+		ProcessTerm(0);
+
+		// If reached the end of the file, break
+		if (CUR_TOKEN.type == TOKEN_NULL)
+			break;
+	}
+
+	outfunc;
+}
+
+
+int CodeGenerator::GetNumBits(unsigned int value)
+{
+	int		bits = 0;
+
+	while (value)
+	{
+		value = value & (value - 1);
+		bits++;
+	}
+
+	return (bits);
+}
+
+
+int CodeGenerator::GetLog2(int value)
+{
+	int		log = 0;
+
+	while (log != 32)
+	{
+		if (1 << log == value)
+			return (log);
+
+		log++;
+	}
+
+	return (-1);
+}
+
+
+Class *CodeGenerator::GetActiveClass(void)
+{
+	return (cur_class);
+}
+
+
+void CodeGenerator::GetTypeInfo(VarType &type)
+{
+	switch (CUR_TOKEN.type)
+	{
+		case (TOKEN_VOID):
+			type.id = VARIABLE_TYPEID_VOID;
+			strcpy(type.name, "void");
+			break;
+
+		case (TOKEN_DECLARE_FLOAT):
+			type.id = VARIABLE_TYPEID_FLOAT;
+			strcpy(type.name, "float");
+			break;
+
+		case (TOKEN_DECLARE_INT):
+			type.id = VARIABLE_TYPEID_INT;
+			strcpy(type.name, "int");
+			break;
+
+		case (TOKEN_DECLARE_SHORT):
+			type.id = VARIABLE_TYPEID_SHORT;
+			strcpy(type.name, "short");
+			break;
+
+		case (TOKEN_DECLARE_CHAR):
+			type.id = VARIABLE_TYPEID_CHAR;
+			strcpy(type.name, "char");
+			break;
+
+		default:
+			throw CompileError("(Line %d) Illegal keyword defining function return type", CUR_TOKEN.line);
+			break;
+	}
+}
+
+
+int CodeGenerator::IsOpAssign(Token &token)
+{
+	switch (token.type)
+	{
+		case (TOKEN_PLUS_ASSIGN):
+		case (TOKEN_MINUS_ASSIGN):
+		case (TOKEN_MULTIPLY_ASSIGN):
+		case (TOKEN_DIVIDE_ASSIGN):
+		case (TOKEN_MODULUS_ASSIGN):
+		case (TOKEN_BITWISE_AND_ASSIGN):
+		case (TOKEN_BITWISE_OR_ASSIGN):
+		case (TOKEN_BITWISE_XOR_ASSIGN):
+			return (1);
+	}
+
+	return (0);
+}

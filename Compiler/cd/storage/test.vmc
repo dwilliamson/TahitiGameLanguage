@@ -1,0 +1,78 @@
+class MyClass
+{
+        int x[5], y, z;
+        int array[5];
+
+	function void Init(int x, int y, int z)
+	{
+		int	test_var;
+
+		y = array[0]++ + array[1]++;
+		++x;
+
+		Hello();
+//		x = --z;
+//		x += --array[0] * 3;
+//		x = 3 + 5 + z + test_var;
+	}
+
+	function void TestFunction(int xy)
+	{
+		x[3] = 5;
+	}
+
+	function final void Hello(void)
+	{
+		y++;
+	}
+
+	function int TestAll()
+	{
+		int	tester;
+
+		tester = x[y++] + 1;
+
+		return (11);
+	}
+
+        state Alive
+	{
+		function Test(void)
+		{
+			array[x[0]] = 5 * z + y;
+		}
+
+	begin:
+                y = z;
+		Test();
+        }
+
+        state Dead
+        {
+	begin:
+                x[x[4 + array[7]] = z = y] = x[2] + 3 * z;
+                y = 3;
+		z = array[7] + x[0];
+
+		Init(1, 2, 3);
+		Hello();
+		y = TestAll();
+        }
+
+//        x[3] = 1;
+
+//        11 + 2 + 3 * !-(-(1 + 2 * (2 + 3)) / -2);
+
+        //   0 != 0;
+//        3 == 4 != 1 > (1 < 3 >= 3 <= 7);
+
+//        3 + !5;
+
+//        !(3 != 1 && 5 != 2) || 3;
+
+//        3 != 1 && 5 != 2 || 3;
+
+//        ((1 && 2) + (3 && 4)) && ((2 && 1) + (4 && 3));
+
+//        3 && 5 && 2 || 3 && 1;
+}

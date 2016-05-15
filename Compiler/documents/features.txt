@@ -1,0 +1,8 @@
+Got
+---
+Functions can be inherited from parent classes.
+Child classes can write new versions of inherited functions.
+Cannot over-write "final" functions in parent classes. This also results in faster code.
+Functions are virtual by default so you can typecast classes to their base class and have
+ the correct function called.
+Variables can over-write those defined in parent classes. Variables cannot be virtual.

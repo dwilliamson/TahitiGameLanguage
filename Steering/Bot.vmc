@@ -1,0 +1,347 @@
+
+class Bot extends Vehicle
+{
+	function Bot(void)
+	{
+		// Default state
+		m_Pos[0] = 100;	m_Pos[1] = 100;
+		m_Vel[0] = 0;	m_Vel[1] = 200;
+
+		// Make sure the bot doesn't draw in an illegal start position
+		SetDrawPosition(m_Pos[0], m_Pos[1]);
+		SetDrawVelocity(m_Vel[0], m_Vel[1]);
+
+		// Start wandering
+		setstate Wander;
+	}
+
+
+	// ----------------------------------------------------------------------------------------------------
+	// ----- WANDER STATE ---------------------------------------------------------------------------------
+	// ----------------------------------------------------------------------------------------------------
+
+
+	state Wander
+	{
+		function Steer(void)
+		{
+			// Move randomly around the targeting circle
+			m_CircleT += 0.5 - Random();
+
+			// Make changes
+			UpdateSteering(200);
+		}
+
+
+	begin:
+
+		// Print state info
+		PrintString("Entering wander state");
+
+		while (1)
+		{
+			// Low-level locomotive part
+			Integrate(0.01);
+
+			// Mid-level steering
+			Steer();
+
+			// Finished frame, change bot's visible parameters
+			SetDrawPosition(m_Pos[0], m_Pos[1]);
+			SetDrawVelocity(m_Vel[0], m_Vel[1]);
+
+			// Need to avoid the circle?
+			if (Distance(m_Pos[0], m_Pos[1], 320, 240) < 100.0)
+				setstate AvoidCircle;
+
+			// Need to avoid the left wall?
+			if (m_Pos[0] < 40)
+				setstate AvoidWalls;
+
+			// Need to avoid the top wall?
+			if (m_Pos[1] < 40)
+				setstate AvoidWalls;
+
+			// Need to avoid the right wall?
+			if (m_Pos[0] >= 600)
+				setstate AvoidWalls;
+
+			// Need to avoid the bottom wall?
+			if (m_Pos[1] >= 440)
+				setstate AvoidWalls;
+		}
+	}
+
+
+	// ----------------------------------------------------------------------------------------------------
+	// ----- AVOID CIRCLE STATE ---------------------------------------------------------------------------
+	// ----------------------------------------------------------------------------------------------------
+
+
+	state AvoidCircle
+	{
+		function Steer(void)
+		{
+			float	dist, dx, dy, target, PI, speed, cos_angle;
+			
+			speed = 200;
+			PI = 3.1415927;
+
+			// Get the distance from the centre of the circle
+			dx = m_Pos[0] - 320;
+			dy = m_Pos[1] - 200;
+			dist = Distance(m_Pos[0], m_Pos[1], 320, 240);
+
+			// Turn away using current momentum
+			if (m_SteeringVel < 0)
+				target = PI + PI / 2;
+			else
+				target = PI / 2;
+
+			// Within reach of the circle?
+			if (dist < 100.0)
+			{
+				// If the bot is moving towards the circle, turn away
+				if (dx * m_Vel[0] + dy * m_Vel[1] < 0)
+					m_CircleT += (target - m_CircleT) * 0.1;
+
+				// Else just wander
+				else
+					m_CircleT += 0.5 - Random();
+
+				// Slow down the bot quadratically, the closer it gets to the circle
+				if (dist < 80)
+					speed = 0;
+				else
+					speed = ((dist - 80) * (dist - 80)) / 2;
+			}
+
+			// Left the circle region of influence, start wandering again
+			if (dist >= 100)
+				setstate Wander;
+
+			// Make changes
+			UpdateSteering(speed);
+		}
+
+
+	begin:
+
+		// Print state info
+		PrintString("Entering avoid circle state");
+
+		while (1)
+		{
+			// Low-level locomotive part
+			Integrate(0.01);
+
+			// Mid-level steering
+			Steer();
+
+			// Finished frame, change bot's visible parameters
+			SetDrawPosition(m_Pos[0], m_Pos[1]);
+			SetDrawVelocity(m_Vel[0], m_Vel[1]);
+		}
+	}
+
+
+	// ----------------------------------------------------------------------------------------------------
+	// ----- AVOID WALLS STATE ----------------------------------------------------------------------------
+	// ----------------------------------------------------------------------------------------------------
+
+
+	state AvoidWalls
+	{
+		function Steer(void)
+		{
+			float	target, speed, PI;
+
+			speed = 200;
+			PI = 3.1415927;
+
+			// Avoid left wall
+			if (m_Pos[0] < 40)
+			{
+				// Calculate turn target
+				if (m_Vel[1] < 0)
+					target = PI + PI / 2;
+				else
+					target = PI / 2;
+
+				// If the bot is moving towards the wall, turn away
+				if (m_Vel[0] < 0)
+					m_CircleT += (target - m_CircleT) * 0.1;
+
+				// Else just wander
+				else
+					m_CircleT += 0.5 - Random();
+
+				// Slow the bot down the closer it gets to the wall
+				if (m_Pos[0] < 0)
+					speed = 0;
+				else
+					speed = m_Pos[0] * 5;
+			}
+
+			// Avoid top wall
+			if (m_Pos[1] < 40)
+			{
+				// Calculate turn target
+				if (m_Vel[0] > 0)
+					target = PI + PI / 2;
+				else
+					target = PI / 2;
+
+				// If the bot is moving towards the wall, turn away
+				if (m_Vel[1] < 0)
+					m_CircleT += (target - m_CircleT) * 0.1;
+
+				// Else just wander
+				else
+					m_CircleT += 0.5 - Random();
+
+				// Slow the bot down the closer it gets to the wall
+				if (m_Pos[1] < 0)
+					speed = 0;
+				else
+					speed = m_Pos[1] * 5;
+			}
+
+			// Avoid right wall
+			if (m_Pos[0] >= 600)
+			{
+				// Calculate turn target
+				if (m_Vel[1] > 0)
+					target = PI + PI / 2;
+				else
+					target = PI / 2;
+
+				// If the bot is moving towards the wall, turn away
+				if (m_Vel[0] > 0)
+					m_CircleT += (target - m_CircleT) * 0.1;
+
+				// Else just wander
+				else
+					m_CircleT += 0.5 - Random();
+
+				// Slow the bot down quadratically, the closer it gets to the wall
+				if (m_Pos[0] >= 640)
+					speed = 0;
+				else
+					speed = (640 - m_Pos[0]) * 5;
+			}
+
+
+			// Avoid bottom wall
+			if (m_Pos[1] >= 440)
+			{
+				// Calculate turn target
+				if (m_Vel[0] < 0)
+					target = PI + PI / 2;
+				else
+					target = PI / 2;
+
+				// If the bot is moving towards the wall, turn away
+				if (m_Vel[1] > 0)
+					m_CircleT += (target - m_CircleT) * 0.1;
+
+				// Else just wander
+				else
+					m_CircleT += 0.5 - Random();
+
+				// Slow the bot down quadratically, the closer it gets to the wall
+				if (m_Pos[1] >= 440)
+					speed = 0;
+				else
+					speed = (480 - m_Pos[1]) * 5;
+			}
+
+			// Left the walls' region of influence, start wandering again
+			if (m_Pos[0] >= 40 && m_Pos[1] >= 40 && m_Pos[0] < 600 && m_Pos[1] < 440)
+				setstate Wander;
+
+			// Make changes
+			UpdateSteering(speed);
+		}
+
+
+	begin:
+
+		// Print state info
+		PrintString("Entering avoid walls state");
+
+		while (1)
+		{
+			// Low-level locomotive part
+			Integrate(0.01);
+
+			// Mid-level steering
+			Steer();
+
+			// Finished frame, change bot's visible parameters
+			SetDrawPosition(m_Pos[0], m_Pos[1]);
+			SetDrawVelocity(m_Vel[0], m_Vel[1]);
+		}
+	}
+
+
+	// ----------------------------------------------------------------------------------------------------
+	// ----- PRIVATE SHARED RESOURCES ---------------------------------------------------------------------
+	// ----------------------------------------------------------------------------------------------------
+
+
+private:
+
+	function Integrate(float dt)
+	{
+	   // Integrate linear
+		m_Pos[0] = m_Pos[0] + m_Vel[0] * dt;
+		m_Pos[1] = m_Pos[1] + m_Vel[1] * dt;
+
+	   // Integrate rotational
+	   m_Orientation += m_SteeringVel * dt;
+
+	   // Calculate the new forward direction
+	   m_Forward[0] = sin(m_Orientation);
+	   m_Forward[1] = cos(m_Orientation);
+	}
+
+
+	function UpdateSteering(float speed)
+	{
+		float PI;	PI = 3.1415927;
+
+		// Min-clamp the speed
+		if (speed < 100) speed = 100;
+
+		// Steer towards the point on the targetting circle - scale turning speed by linear speed (slower linear speed means approaching an obstacle so turn faster)
+		m_SteeringVel = ((((200 - speed) / 200) * 10) + 5) * sin(m_CircleT);
+
+		// Update velocity
+		m_Vel[0] = m_Forward[0] * speed;
+		m_Vel[1] = m_Forward[1] * speed;
+
+		// Clamp circle parameter
+		if (m_CircleT >= 2 * PI) m_CircleT -= 2 * PI;
+		if (m_CircleT < 0)       m_CircleT += 2 * PI;
+	}
+
+
+	// Position of the bot in worldspace
+	float	m_Pos[2];
+
+	// Velocity of the bot in worldspace
+	float	m_Vel[2];
+
+	// Rotation around the up vector
+	float	m_Orientation;
+
+	// Angular velocity
+	float	m_SteeringVel;
+
+	// Bot orientation vector
+	float	m_Forward[2];
+
+	// Wander circle parameter
+	float	m_CircleT;
+}

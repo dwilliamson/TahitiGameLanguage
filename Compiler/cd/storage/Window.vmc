@@ -1,0 +1,19 @@
+class Window
+{
+	// Dimensions
+	int	x, y, w, h;
+
+	function void Center(void)
+	{
+		x = 10;
+		y = 10;
+		w = 100;
+		h = 100;
+	}
+
+	function final void Draw(int style)
+	{
+		x++;
+		y++;
+	}
+}

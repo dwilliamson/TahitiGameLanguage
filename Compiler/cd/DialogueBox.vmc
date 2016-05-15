@@ -1,0 +1,20 @@
+class DialogueBox extends Window
+{
+	int test = 3;
+	int array[4] = { 1, 2, 3, 4 };
+	char xy[10] = { 1, 2, -127 };
+	float blah;
+
+	function PressKey(void)
+	{
+	}
+
+	function void Center(int style)
+	{
+	}
+
+	state Alive
+	{
+	begin:
+	}
+}

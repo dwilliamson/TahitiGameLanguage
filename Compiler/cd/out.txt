@@ -1,0 +1,149 @@
+0000:	instf
+0001:	subst	4
+0006:	pushc	92
+0011:	callim	2
+0016:	push	3
+0021:	callim	1
+0026:	pushl	0
+0031:	pushca	60
+0036:	push	1
+0041:	arrayi
+0042:	asgr
+0043:	asg
+0044:	callim	0
+0049:	setst	0
+0054:	addst	4
+0059:	outstf
+0060:	ret
+0061:	instf
+0062:	subst	48
+0067:	pushl	12
+0072:	push	256
+0077:	asg
+0078:	pushl	0
+0083:	push	5
+0088:	itof
+0089:	asg
+0090:	pushl	0
+0095:	pushl	8
+0100:	pushl	12
+0105:	itof
+0106:	pushl	0
+0111:	fadd
+0112:	ftoi
+0113:	asgp
+0114:	itof
+0115:	asg
+0116:	pushl	16
+0121:	pushl	8
+0126:	itoc
+0127:	asg
+0128:	pushl	24
+0133:	pushl	8
+0138:	itos
+0139:	asg
+0140:	pushl	32
+0145:	pushl	8
+0150:	itouc
+0151:	asg
+0152:	pushl	40
+0157:	pushl	8
+0162:	itous
+0163:	asg
+0164:	pushl	16
+0169:	pushl	0
+0174:	ftoc
+0175:	asg
+0176:	pushl	24
+0181:	pushl	0
+0186:	ftos
+0187:	asg
+0188:	pushl	32
+0193:	pushl	0
+0198:	ftouc
+0199:	asg
+0200:	pushl	40
+0205:	pushl	0
+0210:	ftous
+0211:	asg
+0212:	pushl	0
+0217:	pushl	0
+0222:	pushl	4
+0227:	fsetle
+0228:	itof
+0229:	asg
+0230:	callim	0
+0235:	addst	48
+0240:	outstf
+0241:	ret
+0242:	pushc	0
+0247:	push	4
+0252:	asg
+0253:	ret
+0254:	fpush	1.000000
+0259:	fpush	1.000000
+0264:	fpush	1.000000
+0269:	callim	4
+0274:	pushr
+0275:	push	200
+0280:	mod
+0281:	callim	4
+0286:	pushr
+0287:	push	320
+0292:	mod
+0293:	callim	3
+0298:	callim	0
+0303:	pushc	0
+0308:	push	0
+0313:	asg
+0314:	pushc	4
+0319:	push	0
+0324:	asg
+0325:	pushc	0
+0330:	jz	345
+0335:	pushc	4
+0340:	jnz	355
+0345:	push	0
+0350:	jr	5
+0355:	push	1
+0360:	jz	380
+0365:	pushc	104
+0370:	callim	2
+0375:	jmp	440
+0380:	pushc	0
+0385:	jz	405
+0390:	pushc	116
+0395:	callim	2
+0400:	jmp	440
+0405:	pushc	4
+0410:	jz	430
+0415:	pushc	126
+0420:	callim	2
+0425:	jmp	440
+0430:	pushc	136
+0435:	callim	2
+0440:	pushc	0
+0445:	push	0
+0450:	asg
+0451:	pushc	145
+0456:	callim	2
+0461:	pushc	0
+0466:	incp
+0467:	pushc	0
+0472:	push	3
+0477:	setl
+0478:	jnz	451
+0483:	setst	0
+0488:	endst
+
+0000:	ret
+0001:	instf
+0002:	outstf
+0003:	ret
+0004:	endst
+
+0000:	endst
+0001:	ret
+0002:	endst
+0003:	endst
+

@@ -1,0 +1,109 @@
+class Window
+{
+	// Dimensions
+	int	x = 3, y, w, h;
+	int	z[10] = { 0, 1 };
+	string	name[3] = { "Hello", "out", "there" };
+
+	function void Window(void)
+	{
+		string	type;
+		
+		SetTitle("Hello There");
+		SetMode(3);
+
+		type = name[1];
+
+		Draw();
+
+		setstate Alive;
+	}
+
+	function void Center(void)
+	{
+		float	a, b;
+		int	c, d;
+		char	e, f;
+		short	g, h;
+		unsigned char	i, j;
+		unsigned short	k, l;
+
+//		x = (c || y && d + e) && h + h;
+//		c = 0;
+//		x = c || d && y && h;
+
+//		x = z[3]++;
+//		x = ++z[3 + 4];
+
+		// Convert "d" to a float, do a float addition and convert the result to int
+		d = 256;
+		a = 5;
+		a = c = d + a;
+
+		e = c;
+		g = c;
+		i = c;
+		k = c;
+
+		e = a;
+		g = a;
+		i = a;
+		k = a;
+
+		a = a <= b;
+
+		Draw();
+	}
+
+	state Alive
+	{
+		function Test(void)
+		{
+			x = 4;
+		}
+
+	begin:
+		PlotPixel(Random() % 320, Random() % 200, 1.0, 1.0, 1.0);
+		//Test();
+		Draw();
+
+		x = 0;
+		y = 0;
+
+		//if (x && y)
+		//   SetTitle("all nonzero");
+
+		//else if (x)
+		//   SetTitle("x nonzero");
+
+		//else if (y)
+		//   SetTitle("y nonzero");
+
+		//else
+		//   SetTitle("all zero");
+
+		//for (x = 0; x < 3; x++)
+		//{
+		//   if (x == 2)
+		//      break;
+
+		//   if (x == 1)
+		//      continue;
+
+		//   SetTitle("Yadda");
+		//}
+
+		while (1)
+		{
+		   SetTitle("Blergh");
+
+		   if (++x == 3)
+		      break;
+		}
+
+		//z[0] = 3 * 4.0 + x;
+		//SetMode(z[0]);
+		
+		setstate Alive;
+	}
+}

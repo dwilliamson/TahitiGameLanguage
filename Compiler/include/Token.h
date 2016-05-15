@@ -1,0 +1,154 @@
+
+#ifndef	_INCLUDED_TOKEN_H
+#define	_INCLUDED_TOKEN_H
+
+
+#define TOKEN_GROUP_NONE		0
+#define TOKEN_GROUP_NUMBER		1
+#define TOKEN_GROUP_NAME		2
+#define TOKEN_GROUP_OPERATOR	3
+#define TOKEN_GROUP_MISC		4
+#define TOKEN_GROUP_KEYWORD		5
+
+
+#define TTSHIFT					8
+#define TTNOT(x)				(x | (x << TTSHIFT))
+
+#define TOKEN_TYPE_ASSIGNMENT	0x0001
+#define TOKEN_TYPE_OPERATOR		0x0002
+#define TOKEN_TYPE_BRACKETOPS	0x0004
+#define TOKEN_TYPE_RELOPS		0x0008
+#define TOKEN_TYPE_BRANCHOPS	0x0010
+
+
+// All the possible tokens generated
+typedef enum _TokenType
+{
+	TOKEN_NULL = 0,
+	TOKEN_NAME,
+	TOKEN_NUMBER,
+	TOKEN_PLUS,
+	TOKEN_PLUS_ASSIGN,
+	TOKEN_PLUS_PLUS,
+	TOKEN_MINUS,
+	TOKEN_MINUS_ASSIGN,
+	TOKEN_MINUS_MINUS,
+	TOKEN_DIVIDE,
+	TOKEN_DIVIDE_ASSIGN,
+	TOKEN_MULTIPLY,
+	TOKEN_MULTIPLY_ASSIGN,
+	TOKEN_BITWISE_AND,
+	TOKEN_BITWISE_AND_ASSIGN,
+	TOKEN_LOGICAL_AND,
+	TOKEN_BITWISE_XOR,
+	TOKEN_BITWISE_XOR_ASSIGN,
+	TOKEN_BITWISE_OR,
+	TOKEN_BITWISE_OR_ASSIGN,
+	TOKEN_LOGICAL_OR,
+	TOKEN_ASSIGN,
+	TOKEN_SHL_ASSIGN,
+	TOKEN_SHR_ASSIGN,
+	TOKEN_EQUAL,
+	TOKEN_LEFT_BRACKET,
+	TOKEN_RIGHT_BRACKET,
+	TOKEN_MODULUS,
+	TOKEN_MODULUS_ASSIGN,
+	TOKEN_LOGICAL_NOT,
+	TOKEN_LOGICAL_NOT_EQUAL,
+	TOKEN_LESS,
+	TOKEN_LESS_EQUAL,
+	TOKEN_SHIFT_LEFT,
+	TOKEN_GREATER,
+	TOKEN_GREATER_EQUAL,
+	TOKEN_SHIFT_RIGHT,
+	TOKEN_BITWISE_NOT,
+	TOKEN_COMMA,
+	TOKEN_COLON,
+	TOKEN_END_OF_LINE,
+	TOKEN_BLOCK_OPEN,
+	TOKEN_BLOCK_CLOSE,
+	TOKEN_CPP_COMMENT,
+	TOKEN_ARRAY_OPEN,
+	TOKEN_ARRAY_CLOSE,
+	TOKEN_DECLARE_FLOAT,
+	TOKEN_DECLARE_INT,
+	TOKEN_DECLARE_CHAR,
+	TOKEN_DECLARE_SHORT,
+	TOKEN_DECLARE_SIGNED,
+	TOKEN_DECLARE_UNSIGNED,
+	TOKEN_VOID,
+	TOKEN_IF,
+	TOKEN_ELSE,
+	TOKEN_FOR,
+	TOKEN_CONTINUE,
+	TOKEN_BREAK,
+	TOKEN_WHILE,
+	TOKEN_SWITCH,
+	TOKEN_CASE,
+	TOKEN_DEFAULT,
+	TOKEN_DO,
+	TOKEN_DECLARE_CLASS,
+	TOKEN_PUBLIC,
+	TOKEN_PROTECTED,
+	TOKEN_PRIVATE,
+	TOKEN_DECLARE_STATE,
+	TOKEN_DECLARE_FUNCTION,
+	TOKEN_FINAL,
+	TOKEN_RETURN,
+	TOKEN_EXTENDS,
+	TOKEN_BEGIN,
+	TOKEN_ABSTRACT,
+	TOKEN_SETSTATE,
+	TOKEN_DECLARE_STRING,
+	TOKEN_STRING_LITERAL,
+	TOKEN_IMPORT,
+	TOKEN_INTERFACE,
+	TOKEN_METHOD
+};
+
+
+typedef struct
+{
+	// Which group the token belongs to
+	int			group;
+
+	// Operator precedence
+	int			priority;
+
+	// Opcode of the token, if one exists
+	OpcodeType	opcode;
+} TokenInfo;
+
+
+class Token
+{
+public:
+	// What kind of token this is
+	_TokenType	type;
+
+	// Position in the file
+	int			position;
+
+	// Line of the file where the token exists
+	int			line;
+
+	// Length of token
+	int			length;
+	
+	// Print all the info about this token
+	void		PrintInfo(VMCFile &parent);
+
+	// Which group the token belongs to
+	int			Group(void);
+
+	// The operator precedence of this token
+	int			Priority(void);
+
+	// Is this token of type...
+	int			Is(int values);
+
+	OpcodeType	Opcode(void);
+};
+
+
+#endif	/* _INCLUDED_TOKEN_H */

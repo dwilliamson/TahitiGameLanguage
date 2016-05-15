@@ -1,0 +1,1490 @@
+
+Token list management
+---------------------
+
+Each character in the file needs to be organised into a series of tokens which the code
+generator will interpret. Each token has a type. Because a token type can be generalised
+to "NAME", the name itself needs to be stored somewhere. Rather than allocating any
+unnecessary memory the position and length of the name could be stored along with the
+token, requiring 12 bytes of data per token.
+
+The problem is when are these tokens to be generated? An entire list of tokens could be
+generated upon initially compiling the script but that could waste too much memory. A 100k
+script file (if it contains something like AI, it could probably be that big) alone would
+require 1,200k of data to be allocated - a bit too obscene.
+
+Another solution is to generate a row of tokens (ones that occur on the same line) and
+after that, send them along to the code generator. The problem here is that processing
+block statements (e.g. { x = 5; { y = 3; } }) needs to be a recursive process meaning
+that once the code generator starts at the first bracket, it won't return until it hits
+a bracket which closes the same scope it opened. The token generation code however will
+stop either after the first bracket or the 'x = 5;' part (depending upon how it is
+implemented) making it impossible for the code generator to complete its task.
+
+If, rather than traversing the token list, another intermediate function called 'GetNextToken'
+is introduced, it allows for the regeneration of another token list if the current list
+runs out. This almost sounds like the perfect solution; have a token packet which is similar
+to a file cache that is re-initialised when you move into a new section.
+
+There are still problems. For example, what happens if the next token needs to be looked at
+rather than retrieved, and the current token is the last one in the packet? Perhaps if
+a function called 'ProbeNextToken' was used which merely identified the token (yet retained
+the file positition), this problem could be resolved. Something similar, although more
+annoying, happens at the other end of the packet; what happens when the token before the
+current one needs to be looked at and the current token is the last in the packet?
+
+Fixing these would be fairly straightforward but messy. A very good idea however, would be
+to store two extra tokens at either end of the packet which would receive the tokens before
+and after the first and last tokens in the packet, causing overlap like...
+
+              Packet 1
+	+-+----------------------+-+
+	|x|                      | |
+	+-+----------------------+-+        Packet 2
+	                       +-+------------------------+-+
+						   | |                        |x|
+						   +-+------------------------+-+
+
+The tokens marked 'x' are at at either end of the file so are obviously invalid and shouldn't
+receive reference, if the syntax of the script code is correct. In fact, this method lends
+itself beautifully to being able to seek any number of tokens ahead or back within the
+list (increasing memory requirements as the depth increases).
+
+Compilation order
+-----------------
+
+The language can be described in BNF. The asterisk means "zero or more instances of", the
+brackets are used to group subexpressions and the pipe means "or", the lower case e means
+that this component can be missing.
+
+// These are already specified
+           
+		   letter -> [A-Z a-z]
+            digit -> [0-9]
+             name -> letter ( letter | digit)*
+
+           digits -> digit digit*
+optional_fraction -> . digits | e
+optional_exponent -> ( E ( + | - | e ) digits ) | e
+           number -> digits optional_fraction optional_exponent
+
+// To be specified
+
+		     term -> name | number
+			 expr -> term op term | term
+
+Binary operator handling
+------------------------
+
+The following sequence of code...
+
+	if (x < y)
+	{
+		do_stuff;
+	}
+
+Could be generated optimally like so...
+
+	push	[x]
+	push	[y]
+	jge		over_if_statement
+
+However, this would require mixing binary arithmetic with different types of jump opcode.
+If instead, any binary arithmetic within an expression simply evaluated to a series of
+set* opcodes, leaving a 1/0 on the stack then the jump can be handled very easily
+like so...
+
+	push	[x]
+	push	[y]
+	setl
+	jz		over_if_statement
+
+The single "jz" would ONLY be inserted if the expression was wrapped by an if-statement
+meaning that the same piece of code can be used everywhere for expressions without any
+special cases. Of course, this leaves the option for late optimisation by means of merging
+successive jumps ("setl, jz" to "jge").
+
+Logical AND and OR operators
+----------------------------
+
+These two operators seperate blocks of conditions like so...
+
+	if (x < y AND a > b)
+		do_stuff;
+
+The following code would be the most desired...
+
+	push	[x]
+	push	[y]
+	jge		over_if_statement
+	push	[a]
+	push	[b]
+	jle		over_if_statement
+
+By the previous sections directions however, the following code would be generated...
+
+	push	[x]
+	push	[y]
+	setl
+	jz		over_if_statement
+	push	[a]
+	push	[b]
+	setg
+	jz		over_if_statement
+
+If the section of code was...
+
+	if (x < y OR a > b)
+		do_stuff;
+
+The following code would the most desired...
+
+	push	[x]
+	push	[y]
+	jl		over_next_condition
+	push	[a]
+	push	[b]
+	jle		over_if_statement
+
+The code generated would be...
+
+	push	[x]
+	push	[y]
+	setl
+	jnz		over_next_condition
+	push	[a]
+	push	[b]
+	setg
+	jz		over_if_statement
+
+-----------------------------------------
+
+	if (x && (y = a && b))
+	{
+	}
+
+	push	[x]
+	jz		E.false
+	push	[a]
+	jz		E2.false
+	push	[b]
+	jz		E2.false
+	push	1
+	pop		[y]
+E2.false
+	push	0
+	pop		[y]
+
+-----------------------------------------
+
+	x = E1 AND E2
+
+The results of E1 and E2 need to be left on the stack, a true result is anything other
+than 0 while a false result is always 0.
+
+	; Expression 1 is parsed and the result is on the top of the stack
+	push	[E1]
+	; If the next instruction is AND then the next condition needs to be tested. Therefore,
+	; if this result is true, a jump to the next comparison needs to be made, if this result
+	; is false, a jump to the end needs to be made.
+	jz		L1
+	; Expression 2 is parsed and the result is on the top of the stack
+	push	[E2]
+	jz		L1
+	push	1
+	jmp		L2
+L1:	push	0
+	; Beginning of user code (could be if statement or assignment)
+L2:	pop		[x]
+
+-----------------------------------------
+
+	x = E1 AND E2 AND E3
+
+	push	[E1]
+	jz		L1
+	push	[E2]
+	jz		L1
+	push	[E3]
+	jz		L1
+	push	1
+	jmp		L2
+L1:	push	0
+L2:	pop		[x]
+
+-----------------------------------------
+
+	x = E1 OR E2
+
+	; Expression 1 is parsed and the result is on the top of the stack
+	push	[E1]
+	; If the next instruction is OR then the next condition does not need to be tested if
+	; the expression is true.
+	jnz		L1
+	push	[E2]
+	jnz		L1
+	push	0
+	jmp		L2
+L1:	push	1
+L2:	pop		[x]
+
+-----------------------------------------
+
+	x = E1 OR E2 OR E3
+
+	push	[E1]
+	jnz		L1
+	push	[E2]
+	jnz		L1
+	push	[E3]
+	jnz		L1
+	push	0
+	jmp		L2
+L1:	push	1
+L2: pop		[x]
+
+
+-----------------------------------------
+
+	x = E1 OR E2 AND E3 OR E4
+
+	push	[E1]
+	jnz		true
+	push	[E2]
+	jz		false
+	push	[E3]
+	jnz		true
+	push	[E4]
+	jnz		true
+	jmp		false
+false:
+	push	0
+	jmp		end
+true:
+	push	1
+end:
+	pop		[x]
+
+-----------------------------------------
+
+	x = E1 AND E2
+
+	push	[E1]
+	jz		false
+	push	[E2]
+	jnz		true
+	jmp		false
+false:
+	push	0
+	jmp		end
+true:
+	push	1
+end:
+	pop		[x]
+
+-----------------------------------------
+
+General rules:
+
+Process expression. If the next operator is AND, generate a "jz false" instruction. This is
+because the current expression and the next expression must be satisfied so if this current
+expression is false, there is no need to test the next expression. However, if this
+expression is true then the next expression needs to be tested also. If the next operator
+is OR, generate a "jnz true" instruction. This is because either this expression or the
+next expression needs to be satisfied therefore if the first expression is true there is
+no need to test the second expression. However, if the first expression is false then it
+will fall through and attempt to validate the second expression.
+
+The last expression merely needs a "jnz true" instruction since it will fall through and
+process the false code if it fails.
+
+After the parser surfaces from a sequence of AND/ORs the true/false code needs to be written,
+which is simply...
+
+false:
+	push	0
+	jmp		end
+true:
+	push	1
+end:
+
+This is now available to be used in any calculations or if/do/while statements.
+
+One problem has arised. If the following sequence of code is used...
+
+	x = E1 AND E2 OR E3
+
+The code will generate a jump to false if E1 fails. This means that the 'OR E3' part will
+be left untested. The code can be correct by adding some extra brackets...
+
+	x = (E1 AND E2) OR E3
+
+But this should not be necessary. Changing the operator precedence so that OR is higher than
+AND would not work since the code would effectively change to...
+
+	x = E1 AND (E2 OR E3)
+
+What could work is if the parser encounters an OR then it empties the jump list in the
+expression frame of all false jumps, backpatching them to compensate.
+
+Assignments
+-----------
+
+A typical assignment like...
+
+	x = y;
+
+Would be generated like so...
+
+	push	[y]
+	pop		[x]
+
+If arrays were introduced then code like this...
+
+	x[2] = y;
+
+Could be generated like so...
+
+	; Push the value located at y on the stack
+	push	[y]
+	; Push the address of 'x' on the stack
+	push	x
+	; Push the array index on the stack
+	push	2
+	; Add the two to form the address
+	add
+	; Pop the address into a register
+	pop		register
+	; Pop the value to the location specified in the register
+	pop		[register]
+
+A double lookup like...
+
+	x[y[2]] = z;
+
+Would generate this code...
+
+	; Push the value located at z on the stack
+	push	[z]
+	; Push the address of 'y' on the stack
+	push	y
+	; Push the array index on the stack
+	push	2
+	; Add the two to form an address
+	add
+	; Pop the address into a register
+	pop		register
+	; Push the value found at that location onto the stack
+	push	[register]
+	; Now push the address of 'x'
+	push	x
+	; Add the two to form an address
+	add
+	; Pop the address into a register
+	pop		register
+	; Pop the value to the location specified in the register
+	pop		[register]
+
+The problem here is that the variable z is encountered last in the line yet it's the first
+item to be pushed on the stack. The section within the array markers is effectively an
+assignment so maybe the solution to this is as follows...
+
+	; x is encountered
+	; A check to see if the next token is an '=' is made, it isn't
+	; A check to see if the next token is an array opener is made, it is.
+	; Parser processes an expression that is ended by ']'
+	; y is encountered
+	; A check to see if the next token is an '=' is made, it isn't
+	; A check to see if the next token is an array opener is made, it is
+	; Parser processes an expression that is ended by ']'
+	; 2 is encountered, push it
+
+	push	2
+
+	; Exited 2nd expression
+	; Because this was an array, push address of y onto the stack and add
+
+	push	y
+	add
+
+	; Still out of 2nd expression, pop the address into a temporary register
+
+	pop		register
+
+	; Check to see if in assignment. Yes, so push value at register on the stack
+
+	push	[register]
+
+	; Exited 1st expression.
+	; Because this was an array, push address of x onto the stack and add
+
+	push	x
+	add
+
+	; Still out of 1st expression pop the address into a temporary register
+
+	pop		register
+
+	; Check to see if in assignment. No
+	; Check to see if the next token is an '='
+	; Yes, so skip past it and process the expression
+	; 'z' encountered in an expression, push it
+
+	push	[z]
+
+	; Out of expression
+	; This was an array expression, pop to the address in the register
+
+	pop		[register]
+
+Variables
+---------
+
+There is going to be no support for global variables in the language. All variables must
+be declared within the class or a function. Variables declared within a function are
+deemed local. If a variable is public then it needs to be accessible from other classes.
+For example...
+
+	// Declaration of class with its public member variables
+	class MyClass
+	{
+		public:
+
+		int		x, y, z;
+
+		function Init(void)
+		{
+			// Class can access them
+			x = y = z = 0;
+		}
+	}
+
+	// Class which holds the above one
+	class OtherClass
+	{
+		// Structure-type members are ALWAYS pointers
+		MyClass	temp;
+
+		function Init(void)
+		{
+			// How to access the variables
+			temp.x = temp.y = temp.z = 1;
+		}
+	}
+
+Each class will have a location in memory, this can be called its base address. When
+accessing the member variables, relative addressing can be used to get at them with a
+current base address value. So, the following code...
+
+	x = 0;
+
+Will generate...
+
+	push	0
+	popc	[x]
+
+The instructions "pushc" and "popc" are the class versions of "push" and "pop". They take
+the address of the variable and add the current class base address before using it. The
+virtual machine should be responsible for updating this base address when switching between
+threads. However, accessing member variables from outside of the class like...
+
+	temp.x = 0;
+
+Needs a new base address. This can be done like...
+
+	; Push a new base address
+	pushb	[temp]
+	; Push the position of this member variable
+	pushc	[x]
+
+"pushb" pushes a new base address to be used by the next "pushc" or "popc" instruction.
+Once one of those instructions is encountered, the pushed base address is popped off to
+let the old one take effect. It's possible for the following situation to occur...
+
+	class ClassA
+	{
+		public:
+		
+		int		x, y, z;
+	}
+
+	class ClassB
+	{
+		public:
+		
+		ClassA	ref;
+	}
+
+	class ClassC
+	{
+		public:
+
+		ClassB	temp;
+
+		function Init(void)
+		{
+			temp.ref.x = 0;
+		}
+	}
+
+Multiple levels of indirection are being used here, possibly causing a problem. This
+situation requires that the base address be stored somewhere within the class and be
+accessible by the generated code. Say every class has a variable called "baseaddr". This
+means that the "pushb" instruction needs the current base address to get at that variable.
+
+	push	0
+
+	; temp is effectively a pointer to the class.
+	; This means that the base address is located at [temp].
+	; To actually access temp (which is a member variable) the current base address needs
+	;  to be added to it.
+	; So now, push a new base address.
+
+	pushb	[temp]
+
+	; Now within the memory frame of ClassB.
+	; Need a new base address so set it.
+	; This will undo the previous "current" base address.
+
+	pushb	[ref]
+
+	; Now within the memory frame of ClassC
+
+	popc	[x]
+
+So basically, the instructions can be defined as follows
+
+	PUSH IMMEDIATE:
+	Take a value, push it on the stack.
+
+	PUSH CLASS MEMBER:
+	Take the address, add the current base address to it, and push the value located
+	there onto the stack.
+
+	POP CLASS MEMBER:
+	Take the address, add the current base address to it, and pop a value off the top of
+	the stack into that location.
+
+	PUSH BASE ADDRESS:
+	Take the address, add the current base address to it, and set the value located there
+	as the new base address.
+
+Multiple assignments could pose a problem. Like the following code...
+
+	a = b = c = 0;
+
+Taking the first assign. The code generated is...
+
+	; Push zero
+	push	0
+	; Pop into member variable c
+	popc	[c]
+
+The problem here is that the value assigned no longer exists anywhere except in the variable
+c. So far the solution is simple, generate the code like...
+
+	; Encounter 'a', see an '=' token so process expression
+	; Encounter 'b', see an '=' token so process expression
+	; Encounter 'c', see an '=' token so process expression
+	; Encounter '0', in expression so push it
+
+	push	0
+
+	; Exit from expression and pop the result into the variable
+
+	popc	[c]
+
+	; Realise that the code is still in an expression so push the value back on the stack
+
+	pushc	[c]
+
+	; Exit from expression and pop the result into the variable
+
+	popc	[b]
+
+	; Realise that the code is still in an expression so push the value back on the stack
+
+	pushc	[b]
+
+	; Exit from expression and pop the result into the variable
+
+	popc	[a]
+
+This is fine for simple member variables, but what happens if the variables being used are
+arrays? Like this code...
+
+	v[0] = v[1] = v[2] = 1;
+
+The code should be...
+
+	push	1
+	push	2
+	pushc	v
+	add
+	pop		register
+	pop		[register]
+	push	[register]
+	push	1
+	pushc	v
+	add
+	pop		register
+	pop		[register]
+	push	[register]
+	push	0
+	pushc	v
+	add
+	pop		register
+	pop		[register]
+
+But the array processing algorithm stated above will go ahead and calculate the address
+of the first array before the second. This will result in the temporary register invalidating
+itself each time. Ug.
+
+MSVC handles the problem like so...
+
+	; Actual C code
+	210:      a[x = 3] = a[x] = x;
+
+	; Move 'x' into EAX and ECX
+	0040184F   mov         eax,dword ptr [ebp-4]
+	00401852   mov         ecx,dword ptr [ebp-4]
+
+	; Move ECX into 'a[x]'
+	00401855   mov         dword ptr [ebp+eax*4-2Ch],ecx
+
+	; Move 3 into 'x'
+	00401859   mov         dword ptr [ebp-4],3
+
+	; Move 'x' into EDX and EAX
+	00401860   mov         edx,dword ptr [ebp-4]
+	00401863   mov         eax,dword ptr [ebp-4]
+
+	; Move EAX into 'a[x]'
+	00401866   mov         dword ptr [ebp+edx*4-2Ch],eax
+
+Before making the assignment, it processes the expression within the array brackets which
+is what's needed. But, as is noted with the 'x = 3' part, if there is another assignment,
+it will process that, leaving the 'x = 3' until last. So maybe what's needed is another
+recursive function that keeps track of the token position.
+
+Take this one again...
+
+	v[0] = v[1] = v[2] = 1;
+
+	; Code block 1
+
+	pushc	v
+	push	0
+	add
+	pop		register
+
+	; Code block 2
+
+	pushc	v
+	push	1
+	add	
+	pop		register
+
+	; Code block 3
+
+	pushc	v
+	push	2
+	add
+	pop		register
+
+	; When applied
+
+	push	1
+	[Code block 3]
+	pop		[register]
+	push	[register]
+	[Code block 2]
+	pop		[register]
+	push	[register]
+	[Code block 1]
+	pop		[register]
+
+An example of stack based assignment from a book...
+
+	// Code
+	day = (1461 * y) / 4 + (153 * m + 2) / 5 + d;
+
+	; Generated
+	push	day
+	push	1461
+	push	[y]
+	mul
+	push	4
+	div
+	push	153
+	push	[m]
+	mul
+	push	2
+	add
+	push	5
+	div
+	add
+	push	[d]
+	add
+
+	; Here the stack is...
+	;
+	; Top: result
+	;      address of 'day'
+	;
+	; New Instruction: asg (assignment)
+	; This takes the value on the top of the stack and places it in the address one
+	;  level below it, then pops both off.
+
+	asg
+
+Deriving from the above, a simple statement like...
+
+	x = 1;
+
+Would be...
+
+	; Push the address of 'x'
+	pushc	x
+
+	; Push this value
+	push	1
+
+	; Place the value on the top of the stack in the address below it. Pop both off.
+	asg
+
+However, the following...
+
+	x = y = 1;
+
+Would suffer since after assigning 1 to 'y', nothing would be left on the stack except
+the address of 'x'. Obviously, a new instruction is needed which pushes the top value back
+onto the stack after popping both off. So the generated code is...
+
+	; Push the address of 'x'
+	pushc	x
+
+	; Push the address of 'y'
+	pushc	y
+
+	; Push this value
+	push	1
+
+	; Place the value on the top of the stack in the address below it. Pop both off and
+	;  push the value back on.
+	asgp
+
+	; Place the value on the top of the stack in the address below it. Pop both off
+	asg
+
+A way now has to be thought of adding arrays to all this. Take the easiest example...
+
+	v[1] = 2;
+
+This could be generated like...
+
+	pushc	v
+	push	1
+	add
+	push	2
+	asg
+
+Hmmmm........ OK, so this system seems like it might be perfect for arrays. Take the
+multiple assignment example...
+
+	v[0] = v[1] = v[2] = 3;
+
+This could be generated like...
+
+	pushc	v
+	push	0
+	add
+	pushc	v
+	push	1
+	add
+	pushc	v
+	push	2
+	add
+	push	3
+	asgp
+	asgp
+	asg
+
+This system is perfect! Not only is it easier to visualise and code, it's also knocked the
+original code from 18 to 13 instructions!
+
+The original problem of assignments within the array brackets exists. But is it right to
+be considered a problem? After all, it will compile and work perfectly but possibly not
+as the programmer expected (left-to-right instead of right-to-left). The problem can
+be worked around with the code block solution above but that's un-necessary bloat.
+
+An enclosed array example...
+
+	v[v[3]] = 1;
+
+Could be generated like...
+
+	pushc	v
+	pushc	v
+	push	3
+	add
+
+	; Address of value to use is on the stack
+
+	; New instruction: ASGR (replace assignment)
+	;  Replace the address on the top of the stack with the value stored at that address
+
+	asgr
+	add
+	push	1
+	asg
+
+Take some stupid example...
+
+	class ClassA
+	{
+		int		x, y, z;
+	}
+
+	class ClassB
+	{
+		ClassA	list[10];
+	}
+
+	class ClassC
+	{
+		ClassB	test;
+
+		function Init(void)
+		{
+			int		x[3], y;
+
+			x[0] = 1;
+			x[1] = 7;
+			x[2] = 5;
+
+			y = rand()%3;
+
+			test.list[x[y]].x = 10;
+		}
+	}
+
+Pretty mad, but it could happen. So try this for generated code...
+
+	; Set the current class base
+	pushb	[test]
+
+	; Push address of test.list (class base is reset)
+	pushc	list
+
+	; Push address of 'x'
+	pushc	x
+
+	; Push value in 'y'
+	pushc	[y]
+
+	; Add the memory offset to the address of list, leaving the resultant address on stack
+	add
+
+	; Get the value at that address for the index
+	asgr
+
+	; Add the index to the address of test.list
+	add
+
+	; Address of the class is now on the stack but the base is set to the current class.
+	
+	; New Instruction: SETBASE
+	;  Set the current base to the value on the top of the stack and pop it off
+
+	setbase
+
+	; Push address of 'x' (class base is reset)
+	pushc	x
+
+	; Push the value
+	push	10
+
+	; Assign!
+	asg
+
+Functions
+---------
+
+Functions in a class can be inherited. This means the following is possible...
+
+	class ClassA
+	{
+		int		listen;
+
+		function Listen(void)
+		{
+			listen = 1;
+		}
+	}
+
+	class ClassB extends ClassA
+	{
+		function int Check(void)
+		{
+			Listen();
+
+			return (listen);
+		}
+	}
+
+This sort of code generation is pretty simple, just use the properties of the class it
+extends to define the new class. Likewise, function over-riding is possible also - and
+pretty easy, just a change of address. The only problem comes when typecasting extended
+classes to their base class and attempting to call an over-written function. Like...
+
+	class ClassA
+	{
+		function Update(void)
+		{
+			do_stuff;
+		}
+	}
+
+	class ClassB extends ClassA
+	{
+		function Update(void)
+		{
+			do_more_specific_stuff;
+		}
+	}
+
+...code stuffs...
+
+	ClassA	temp;
+
+	temp.Update();
+
+In this case, the old function will always be called as the address is determined at compile
+time. This situation needs a mechanism similar to the virtual function table found in C++.
+
+Passing parameters through the stack is going to be a big nuisance. For a start, anything
+that is used as a function parameter can immediately be considered as in an assignment.
+What is already decided is that each variable has an address. If the variable is something
+like an int, a short or a char then the value of that variable is stored at the address.
+
+If the parameter is another class then located at that address, is a pointer to the
+allocated memory. In effect, the type is 4 bytes in size. So when an object is declared
+within a class like...
+
+	class ClassA
+	{
+		ClassB	b;
+	}
+
+The class within it is simply an un-initialised pointer.
+
+The subject now deviates to passing arrays through the stack. An array of objects is
+identical to an array of integers as far as the stack is concerned so the question is, is
+an array passed as a pointer to the array, or are the entire contents of the array passed
+onto the stack?
+
+In fact, in sticking with the above system...
+
+
+	class ClassA
+	{
+		function DoStuff(void)
+		{
+			ClassB	b;
+
+			b = new ClassB;
+
+			ModifyStuff(b);
+		}
+
+		function ModifyStuff(ClassB b)
+		{
+			b.blah = etc;
+		}
+	}
+
+Above, when the function 'ModifyStuff' gets called, a pointer to the class is passed through
+the stack, hence modifying that object within the function. Arrays should be no different,
+they should be objects too and passed as pointers through the stack.
+
+OK, so now the stack pointer needs to be saved and the variables on the stack need to
+be addressed. When a value is pushed on the stack, the pointer is decremented. When a
+value is popped off the stack, the pointer is incremented. When a function call is made the
+following should happen...
+
+	// Script code
+	FunctionCall(x, y, z);
+
+	; Generated code
+
+	; A push first assigns the value to one place below the current position and then
+	;  decrements the stack. So effectively, the last push value is always addressable
+	;  at [ESP].
+
+	; Push all the values
+	push	[x]
+	push	[y]
+	push	[z]
+	push	return_address			; Done in the 'call'
+
+	call	FunctionCall
+
+	; Reclaim the pushed parameters (minus the return_address)
+	addst	12
+
+	.... Warp to the function ....
+
+	FunctionCall:
+
+	; A pop first reads the value at the top of the stack and assigns it before then
+	;  incrementing the stack pointer.
+
+	; The stack looks like this...
+	; [ESP]			= return address
+	; [ESP - 4]		= value z
+	; [ESP - 8]		= value y
+	; [ESP - 12]	= value x
+
+	; There is an internal register called EBP. This instruction, "in stack frame", will
+	;  push the current value of EBP on the stack and then do EBP = ESP.
+	instf
+
+	; Parameters are now addressable at...
+	; z = [EBP - 8]				(8)
+	; y = [EBP - 12]			(4)
+	; x = [EBP - 16]			(0)
+	;
+	; Also, these are important...
+	; return_address = [EBP - 4]
+	; old EBP value  = [EBP]
+
+	; Some new space for local variables needs to be allocated on the stack, so say...
+	addst	20
+
+	; Local variables start at [EBP + 4] and go up
+	; Parameter variables start at [EBP - 8] and go down
+
+	; New instructions: PUSHL and POPL (for push and pop local)
+
+	... do_stuff ...
+
+	; Reclaim the allocated stack space
+	subst	20
+
+	; This instruction, "out stack frame", will pop the last value off the stack and assign
+	;  it to EBP.
+	outstf
+
+	; The return address is now on the top of the stack
+	ret
+
+NEW Instruction: RPV
+	Replace address on the top of the stack with the pushed value at that address.
+
+Calling the functions
+---------------------
+
+No matter how many instances of a class exist, only one copy of the class code will ever
+exist. Initially, all functions created within a class are virtual. If they are created
+with the "final" modifier then they are not virtual. A way to handle this virtual side needs
+to be thought of. If it was just a normal function call then a call like this would simply
+be enough...
+
+	call	Function
+
+If the same method for addressing member variables is used here then the address of the
+function would be relative to the class. Everytime 'call' is used, the current class base
+address is added to this relative address to find the correct function. But this is not
+the case since there should only one copy of code in memory.
+
+The address can only currently be relative to the start of the object file. So, when the
+linker comes along it will merge all the code and will simply have to update the references
+to this function with the new position.
+
+If this function is declared as 'final' then this shall be the method used to call it.
+
+Now the virtual part.
+
+Each function in a class has a unique function number, generated by the compiler. At the
+end of the VMO file, the following information will be stored for each function...
+
+	FunctionName	: string
+	Address			: integer
+	Index			: integer
+	Super			: integer (initially -1 stating no function over-written)
+
+When a function is declared within a class, a check to see if that function is already in
+that class is made. If it is, and the function ID is less than the starting ID for this class
+it means that the already declared function is from a superclass. Therefore, it is open for
+over-riding. If it is already declared but the function ID is within the range of the current
+class then an error must occur - can't have two of the same function declared in the same
+class.
+
+If the function doesn't exist, simply retrieve a new function ID for it from the class. If
+it does already exist then set the new function ID to that of the existing function. It
+should go like this...
+
+	class A
+	{
+		function Init(void)
+		{
+		}
+	}
+
+	class B extends A
+	{
+		function Init(void)
+		{
+		}
+
+		Init();
+	}
+
+	; Generated call code
+	callv	0
+
+Object file layout
+------------------
+
+Size	Description
+----	-----------
+4		Location of file information
+?		Code segment
+?		Name of the class held in this object file (ASCIIZ)
+1		Boolean, does the class inherit
+?		String specifying the super-class ONLY if this class inherits (ASCIIZ)
+4		Number of functions in the class
+?		"Function Information" for every function in the class
+4		Number of variables in the class
+?		"Variable Information" for every variable in the class
+4		Number of undefined functions referenced in the class
+?		"Undefined Function Information" for every undefined function referenced in the class
+4		Number of undefined variables referenced in the class
+?		"Undefined Variable Information" for every undefined variable referenced in the class
+4		Number of states in the class
+?		"State Information" for every state in the class
+
+State Information
+-----------------
+
+Size	Description
+----	-----------
+?		Name of the state (ASCIIZ)
+4		State position in the code
+4		Location of the 'begin' label (where the state begins execution)
+4		State index within the class
+4		Number of functions in the state
+?		"Function Information" for every function in the state
+4		Number of undefined functions referenced in the state
+?		"Undefined Function Information" for every undefined function referenced in the state
+
+Function Information
+--------------------
+
+Size	Description
+----	-----------
+?		Name of the function (ASCIIZ)
+4		Location of the function in the code
+4		Function index within the class
+4		Number of parameters that the function requires
+4		Function flags
+4		Return type ID
+?		String description of return type, ONLY if it is custom (ASCIIZ)
+
+Variable Information
+--------------------
+
+Size	Description
+----	-----------
+?		Name of the variable (ASCIIZ)
+4		Array element number (0 if not an array)
+4		Size of the variable (for arrays)
+4		Address of the variable relative to the class
+4		Type ID
+?		If the type is custom, the type description string (ASCIIZ)
+?		Default value if not an array, default values if an array
+4		Variable flags
+
+Undefined Function Information
+------------------------------
+
+Size	Description
+----	-----------
+?		Name of the function (ASCIIZ)
+4		Function index
+4		Number of parameters expected
+1		Whether or not the function returns a value
+
+Undefined Variable Information
+------------------------------
+
+Size	Description
+----	-----------
+?		Name of the function (ASCIIZ)
+4		Variable index
+1		Whether the variable has been referenced as an array
+
+Linking with Inheritance
+------------------------
+
+A class will have a list of functions. Each function has a unique index. Take a base class
+first...
+
+	class ClassA
+	{
+		function DoStuff(void)
+		{
+		}
+
+		function DoMoreStuff(void)
+		{
+		}
+	}
+
+Then a class which inherits it and over-rides a function...
+
+	class ClassB extends ClassA
+	{
+		function DoMoreStuff(void)
+		{
+		}
+	}
+
+When any calls are made to 'DoMoreStuff' in the inheriting class, the result is always a
+'callv 0'. However, when a call to the same function is made in the base class the result
+is a 'callv 1'. Something needs to be done to the 'DoMoreStuff' entry in the inheriting class
+to make it callable from the base class. It needs the same index as the base class version.
+
+What to do?
+
+After building the class inheritance tree, any function in an inheriting class that
+over-writes a function should have the index changed to that of the top level class.
+
+	class A
+	{
+		B	ptr;
+	}
+
+	class B
+	{
+		A	ptr;
+
+		function void DoStuff(void)
+		{
+			ptr.ptr.DoMoreStuff();
+		}
+
+		function void DoMoreStuff(void)
+		{
+		}
+	}
+
+Linking variables
+-----------------
+
+Functions are not so bad to link with inheritance (it's already done). Variables are a bit
+of an annoyance, however. Take a simple example...
+
+	class ClassA
+	{
+		function DoStuff(void)
+		{
+			x = 3;
+		}
+	}
+
+If this class extends another class then it's possible that 'x' can exist somewhere in that
+hierarchy. If it doesn't have a super-class then 'x' is clearly an undefined label since
+there are no support for global variables in the language.
+
+When 'x' is encountered and deemed undefined it must be registered as an undefined variable
+and saved out with the VM object file. The first thing that needs to be recorded is the
+name of the variable. That's simple. However, variables can be involved in expressions of
+all kinds so it's desirable to know the type 'x' *should* be. For example, result of the
+top expression is an integer so when 'x' is registered as undefined it should also be
+stated that is expected to be of type "integer". Or better than that, it is being associated
+with an expression that results in an integer. That way, if 'x' turns out to be a floating
+point value, the necessary conversions can be performed. But how is this done in code?
+
+This is the normal defined method...
+
+	; x = 3
+	pushc	x
+	push	3
+	asg
+
+Now take the undefined case. The push will always be a 'pushc', obviously. But it could be
+an 'fpushc' or similar. A 'push' instruction will be used that pushes the undefined index
+of the variable.
+
+One problem arises with arrays. For example, what if 'y' was an array of ints in the
+following...
+
+	x = y;
+
+There is no way of determining it from a normal variable. Therefore it is unclear as to
+what push instruction to use (address or value at that address). This kind of thing should
+be changed by the linker as necessary; all pushes that involve arrays should always be
+changed to address pushes. As a default, it should be pass by value so that nothing disturbs
+non-array variables.
+
+One problem with arrays is the following...
+
+	x = y[3];
+
+Is 'y' an array of chars, shorts or ints? This problem means that the correct address can't
+be calculated until the linking stage. The size shift needs to be updated somehow. Make a
+new opcode for it!
+
+Parse Trees
+-----------
+
+For variables to link successfully, the type returned by a single operation needs to be
+determinable at every level so that variables are not used illegally when defined outside
+of the unit that references them. One way to accomplish this elegantly is by use of parse
+trees, something the expression evaluator does not use.
+
+Take the following code...
+
+	x = 3 + 4;
+
+This would be evaluated in ProcessStatement(). Each statement should have an associated
+parse tree. The generated parse tree for the above would look like...
+
+		=
+	  /	  \
+	 x	   expr
+
+"expr" means an expression should follow. An expression is really the same thing, it has
+a parse tree of its own. So...
+
+	"expr"...
+
+		+
+	  /	  \
+	 3	   4
+
+An involved expression with lots of precedence rules like...
+
+	x = 3 + 4 * 2 + 3 + (1 - 2);
+
+Would look like...
+
+	"expr"...
+				+
+			  /   \
+	        +       \
+          /   \       \
+		+       3       -
+	  /   \           /   \
+	 3     *         1      2
+		 /   \
+		4     2
+
+The code generator would then traverse the tree with an in-order, left first walk. Some
+parsing rules need to be defined in order to create this tree.
+
+The parser starts off expecting a reference. If it finds a reference, a child is created
+for that reference. If the next token is an operator then it grows a parent which holds
+this operator. A general operator would then expect another parameter. Also, a reference
+is expected.
+
+Case: If a reference is expected but an operator is encountered then the following operation
+must be unary. All unary operations force allocation of a node followed by a spawn of the
+right child only.
+
+This might all be fine and dandy for an expression evaluator but how are things like the
+declaration of a class handled? It would be nice to have parse trees only act at the
+statement level.
+
+A list of operations supported by the parse tree...
+
+Operation		Supported
+---------		---------
+
++				Yes
+-				Yes
+*				Yes
+/				Yes
+%				Yes
+&				Yes
+|				Yes
+^				Yes
+<<				Yes
+>>				Yes
+++ (post)		Yes
+-- (post)		Yes
+++ (pre)		Yes
+-- (pre)		Yes
++ (unary)		Yes
+- (unary)		Yes
+~ (unary)		Yes
+! (unary)		Yes
+=				Yes
++=				Yes
+-=				Yes
+*=				Yes
+/=				Yes
+%=				Yes
+&=				Yes
+|=				Yes
+^=				Yes
+<<=				Yes
+>>=				Yes
+&&				Yes
+||				Yes
+
+Function calls within the code
+------------------------------
+
+CodeGenerator::Begin ->
+
+	Loop until NULL token
+	CodeGenerator::ProcessTerm
+
+CodeGenerator::ProcessTerm ->
+
+	Get token, see if it's a class
+	CodeGenerator::ProcessClassTerm
+
+CodeGenerator::ProcessClassTerm ->
+
+	Loop until a '}' token
+	CodeGenerator::ProcessStatement
+
+CodeGenerator::ProcessStatement ->
+
+	CodeGenerator::ProcessExpression (temporary - prhaps ProcessTerm)
+
+State inheritance
+-----------------
+
+Each class has a set of states which it can run through. When a class extends any class, it
+will inherit any of the states within the super-class. All functions are already virtual
+and inherited so there is no need to worry about them. However, what about the code which
+comprises the state (after the 'begin' label)? This code would somehow need to become
+virtual. If a class does not inherit (a base class) then each state MUST have a 'begin'
+label. When a class derives from a class, the new class shall inherit all state properties
+(including 'begin' label position). If, when over-writing part of the state in the new class,
+a 'begin' label is specified, only the position of that label is over-written in the state.
+
+
+IDEA FOR GARBAGE COLLECTION
+---------------------------
+
+Everything in the world is an object, with a place in memory. This memory is allocated
+via a controlled 'new' method. This memory is not raw; it's got various structures
+associated with it. One important part is a list of locations that reference this
+section of memory. When an assignment is made like this...
+
+	subject = memory;
+
+The region of memory which subject currently references has it's entry removed and added
+to this new section of memory.
+
+If a region of memory has no references then it is isolated. The question here is
+whether to free the memory there and then, or check the entire heap periodically for
+regions to release.
+
+USE NUMBER OF REFERENCES RATHER THAN MEMORY ADDRESSES
